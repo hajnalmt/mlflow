@@ -49,6 +49,13 @@ type GetCredentialsForLoggedModelArtifactReadResult = {
   }[];
 };
 
+export type GetExperimentRunDataKeysResponse = {
+  metric_keys?: string[];
+  param_keys?: string[];
+  metric_keys_truncated?: boolean;
+  param_keys_truncated?: boolean;
+};
+
 const searchRunsPath = () => 'ajax-api/2.0/mlflow/runs/search';
 
 const encodePathForRoute = (path: string) => path.split('/').map(encodeURIComponent).join('/');
@@ -158,6 +165,21 @@ export class MlflowService {
    */
   static searchRuns = (data: any) =>
     postJson({ relativeUrl: searchRunsPath(), data }).then(transformSearchRunsResponse);
+
+  /**
+   * List the distinct metric and param keys that are logged on the runs of experiments,
+   * without their values. Used to pick the columns of the runs table without loading all run data.
+   */
+  static getExperimentRunDataKeys = (data: {
+    experiment_ids: string[];
+    run_view_type?: string;
+    search?: string;
+    max_results?: number;
+  }): Promise<GetExperimentRunDataKeysResponse> =>
+    postJson({
+      relativeUrl: 'ajax-api/3.0/mlflow/experiments/get-run-data-keys',
+      data,
+    }) as Promise<GetExperimentRunDataKeysResponse>;
 
   /**
    * List model artifacts

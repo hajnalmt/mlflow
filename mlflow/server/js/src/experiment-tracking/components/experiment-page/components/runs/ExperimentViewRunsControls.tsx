@@ -17,6 +17,8 @@ import { ExperimentViewRunsGroupBySelector } from './ExperimentViewRunsGroupBySe
 import { useUpdateExperimentViewUIState } from '../../contexts/ExperimentPageUIStateContext';
 import type { ExperimentPageSearchFacetsState } from '../../models/ExperimentPageSearchFacetsState';
 import { ExperimentViewRunsSortSelectorV2 } from './ExperimentViewRunsSortSelectorV2';
+import { LIFECYCLE_FILTER } from '../../../../types';
+import { ViewType } from '../../../../sdk/MlflowEnums';
 
 type ExperimentViewRunsControlsProps = {
   viewState: ExperimentPageViewState;
@@ -153,6 +155,11 @@ export const ExperimentViewRunsControls = React.memo(
                     runsData={runsData}
                     selectedColumns={uiState.selectedColumns}
                     onResetColumns={onResetColumns}
+                    runViewType={
+                      searchFacetsState.lifecycleFilter === LIFECYCLE_FILTER.DELETED
+                        ? ViewType.DELETED_ONLY
+                        : ViewType.ACTIVE_ONLY
+                    }
                   />
                 )}
 

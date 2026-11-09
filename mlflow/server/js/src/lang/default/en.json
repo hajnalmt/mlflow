@@ -2015,6 +2015,10 @@
     "defaultMessage": "Contour chart",
     "description": "Experiment tracking > runs charts > add chart menu > contour chart"
   },
+  "6Z75D8": {
+    "defaultMessage": "Showing the first {maxResults} matching metrics and parameters. Type in the search box to find the others.",
+    "description": "Hint below the list of columns in the experiment runs table column selector, displayed when the experiment logs more metrics or parameters than are listed"
+  },
   "6ZhLfu": {
     "defaultMessage": "Visibility",
     "description": "Label for the visibility icon column in the evaluation runs table"
