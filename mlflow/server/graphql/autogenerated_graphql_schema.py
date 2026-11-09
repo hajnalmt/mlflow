@@ -282,6 +282,11 @@ class MlflowListArtifactsInput(graphene.InputObjectType):
     page_token = graphene.String()
 
 
+class MlflowSearchRunsDataProjectionInput(graphene.InputObjectType):
+    metric_keys = graphene.List(graphene.String)
+    param_keys = graphene.List(graphene.String)
+
+
 class MlflowSearchRunsInput(graphene.InputObjectType):
     experiment_ids = graphene.List(graphene.String)
     filter = graphene.String()
@@ -289,6 +294,7 @@ class MlflowSearchRunsInput(graphene.InputObjectType):
     max_results = graphene.Int()
     order_by = graphene.List(graphene.String)
     page_token = graphene.String()
+    data_projection = graphene.InputField(MlflowSearchRunsDataProjectionInput)
 
 
 class MlflowGetRunInput(graphene.InputObjectType):

@@ -309,12 +309,18 @@ input MlflowSearchRunsInput {
   maxResults: Int
   orderBy: [String]
   pageToken: String
+  dataProjection: MlflowSearchRunsDataProjectionInput
 }
 
 enum MlflowViewType {
   ACTIVE_ONLY
   DELETED_ONLY
   ALL
+}
+
+input MlflowSearchRunsDataProjectionInput {
+  metricKeys: [String]
+  paramKeys: [String]
 }
 
 type Mutation {

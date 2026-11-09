@@ -3666,6 +3666,21 @@ message SearchRuns {
 
   optional string page_token = 7;
 
+  // Restricts which metrics and params are returned for each matching run. If unset, all
+  // metrics and params are returned. If set, only the listed metric and param keys are
+  // returned, so empty lists mean that no metrics or no params are returned. Tags are
+  // always returned. This only limits the returned data and does not affect which runs
+  // match ``filter`` or how they are ordered.
+  optional DataProjection data_projection = 8;
+
+  message DataProjection {
+    // Keys of the (latest) metrics to return for each run.
+    repeated string metric_keys = 1;
+
+    // Keys of the params to return for each run.
+    repeated string param_keys = 2;
+  }
+
   message Response {
     // Runs that match the search criteria.
     repeated Run runs = 1;

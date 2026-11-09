@@ -750,27 +750,33 @@ Request Structure
 
 
 
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
-|   Field Name   |          Type          |                                                                        Description                                                                         |
-+================+========================+============================================================================================================================================================+
-| experiment_ids | An array of ``STRING`` | List of experiment IDs to search over.                                                                                                                     |
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| filter         | ``STRING``             | A filter expression over params, metrics, and tags, that allows returning a subset of runs. The syntax is a subset of SQL that supports ANDing together    |
-|                |                        | binary operations between a param, metric, or tag and a constant. Example: ``metrics.rmse < 1 and params.model_class = 'LogisticRegression'`` You can      |
-|                |                        | select columns with special characters (hyphen, space, period, etc.) by using double quotes: ``metrics."model class" = 'LinearRegression' and tags."user-  |
-|                |                        | name" = 'Tomas'`` Supported operators are ``=``, ``!=``, ``>``, ``>=``, ``<``, and ``<=``.                                                                 |
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| run_view_type  | :ref:`mlflowviewtype`  | Whether to display only active, only deleted, or all runs. Defaults to only active runs.                                                                   |
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| max_results    | ``INT32``              | Maximum number of runs desired. If unspecified, defaults to 1000. All servers are guaranteed to support a `max_results` threshold of at least 50,000 but   |
-|                |                        | may support more. Callers of this endpoint are encouraged to pass max_results explicitly and leverage page_token to iterate through experiments.           |
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| order_by       | An array of ``STRING`` | List of columns to be ordered by, including attributes, params, metrics, and tags with an optional "DESC" or "ASC" annotation, where "ASC" is the default. |
-|                |                        | Example: ["params.input DESC", "metrics.alpha ASC", "metrics.rmse"] Tiebreaks are done by start_time DESC followed by run_id for runs with the same start  |
-|                |                        | time (and this is the default ordering criterion if order_by is not provided).                                                                             |
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| page_token     | ``STRING``             |                                                                                                                                                            |
-+----------------+------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+|   Field Name    |                 Type                  |                                                                Description                                                                 |
++=================+=======================================+============================================================================================================================================+
+| experiment_ids  | An array of ``STRING``                | List of experiment IDs to search over.                                                                                                     |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| filter          | ``STRING``                            | A filter expression over params, metrics, and tags, that allows returning a subset of runs. The syntax is a subset of SQL that supports    |
+|                 |                                       | ANDing together binary operations between a param, metric, or tag and a constant. Example: ``metrics.rmse < 1 and params.model_class =     |
+|                 |                                       | 'LogisticRegression'`` You can select columns with special characters (hyphen, space, period, etc.) by using double quotes:                |
+|                 |                                       | ``metrics."model class" = 'LinearRegression' and tags."user-name" = 'Tomas'`` Supported operators are ``=``, ``!=``, ``>``, ``>=``, ``<``, |
+|                 |                                       | and ``<=``.                                                                                                                                |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| run_view_type   | :ref:`mlflowviewtype`                 | Whether to display only active, only deleted, or all runs. Defaults to only active runs.                                                   |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| max_results     | ``INT32``                             | Maximum number of runs desired. If unspecified, defaults to 1000. All servers are guaranteed to support a `max_results` threshold of at    |
+|                 |                                       | least 50,000 but may support more. Callers of this endpoint are encouraged to pass max_results explicitly and leverage page_token to       |
+|                 |                                       | iterate through experiments.                                                                                                               |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| order_by        | An array of ``STRING``                | List of columns to be ordered by, including attributes, params, metrics, and tags with an optional "DESC" or "ASC" annotation, where "ASC" |
+|                 |                                       | is the default. Example: ["params.input DESC", "metrics.alpha ASC", "metrics.rmse"] Tiebreaks are done by start_time DESC followed by      |
+|                 |                                       | run_id for runs with the same start time (and this is the default ordering criterion if order_by is not provided).                         |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| page_token      | ``STRING``                            |                                                                                                                                            |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
+| data_projection | :ref:`mlflowsearchrunsdataprojection` | Restricts which metrics and params are returned for each matching run. If unset, all metrics and params are returned. If set, only the     |
+|                 |                                       | listed metric and param keys are returned, so empty lists mean that no metrics or no params are returned. Tags are always returned. This   |
+|                 |                                       | only limits the returned data and does not affect which runs match ``filter`` or how they are ordered.                                     |
++-----------------+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. _mlflowSearchRunsResponse:
 
@@ -7608,6 +7614,24 @@ Create a new workspace.
 +-----------------------+----------------------------------+--------------------------------------------------------------------+
 | trace_archival_config | :ref:`mlflowtracearchivalconfig` | Optional trace archival settings to apply at creation time.        |
 +-----------------------+----------------------------------+--------------------------------------------------------------------+
+
+.. _mlflowSearchRunsDataProjection:
+
+DataProjection
+--------------
+
+
+
+
+
+
++-------------+------------------------+------------------------------------------------------+
+| Field Name  |          Type          |                     Description                      |
++=============+========================+======================================================+
+| metric_keys | An array of ``STRING`` | Keys of the (latest) metrics to return for each run. |
++-------------+------------------------+------------------------------------------------------+
+| param_keys  | An array of ``STRING`` | Keys of the params to return for each run.           |
++-------------+------------------------+------------------------------------------------------+
 
 .. _mlflowDataset:
 
