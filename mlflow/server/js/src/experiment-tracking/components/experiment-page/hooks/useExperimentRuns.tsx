@@ -17,6 +17,7 @@ import { shouldUsePredefinedErrorsInExperimentTracking } from '../../../../commo
 import Utils from '../../../../common/utils/Utils';
 import { useExperimentRunsAutoRefresh } from './useExperimentRunsAutoRefresh';
 import type { RunEntity, SearchRunsApiResponse } from '../../../types';
+import type { RunsDataProjection } from '../utils/experimentPage.data-projection';
 
 export type FetchRunsHookParams = ReturnType<typeof createSearchRunsParams> & {
   requestedFacets: ExperimentPageSearchFacetsState;
@@ -35,25 +36,42 @@ const createFetchRunsRequestParams = (
   searchFacets: ExperimentQueryParamsSearchFacets | null,
   experimentIds: string[],
   runsPinned: string[],
+  dataProjection?: RunsDataProjection,
 ): FetchRunsHookParams | null => {
   if (!searchFacets || !experimentIds.length) {
     return null;
   }
-  const searchParams = createSearchRunsParams(experimentIds, { ...searchFacets, runsPinned }, Date.now());
+  const searchParams = createSearchRunsParams(
+    experimentIds,
+    { ...searchFacets, runsPinned },
+    Date.now(),
+    undefined,
+    undefined,
+    dataProjection,
+  );
   return { ...searchParams, requestedFacets: searchFacets };
 };
 
 /**
  * This hook will request for new runs data based on the current experiment page search facets and UI state.
  * Replaces GetExperimentRunsContext and a substantial portion of <ExperimentRuns> component stack.
+ *
+ * If `dataProjection` is given, only the metrics and params listed in it are fetched for each run.
  */
 export const useExperimentRuns = (
   uiState: ExperimentPageUIState,
   searchFacets: ExperimentQueryParamsSearchFacets | null,
   experimentIds: string[],
   disabled = false,
+  requestedDataProjection?: RunsDataProjection,
 ) => {
   const dispatch = useDispatch<ThunkDispatch>();
+
+  // Keep the identity of the projection stable as long as its content is the same, so that
+  // it only triggers new requests when the requested metrics and params actually change.
+  const dataProjectionKey = JSON.stringify(requestedDataProjection ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dataProjection = useMemo(() => requestedDataProjection, [dataProjectionKey]);
 
   const [runsData, setRunsData] = useState<ExperimentRunsSelectorResult>(() => createEmptyRunsResult());
 
@@ -180,14 +198,24 @@ export const useExperimentRuns = (
     if (disabled) {
       return;
     }
-    const requestParams = createFetchRunsRequestParams(searchFacets, experimentIds, cachedPinnedRuns.current);
+    const requestParams = createFetchRunsRequestParams(
+      searchFacets,
+      experimentIds,
+      cachedPinnedRuns.current,
+      dataProjection,
+    );
     if (requestParams) {
       fetchRuns(requestParams);
     }
-  }, [fetchRuns, dispatch, disabled, searchFacets, experimentIds]);
+  }, [fetchRuns, dispatch, disabled, searchFacets, experimentIds, dataProjection]);
 
   const loadMoreRuns = async () => {
-    const requestParams = createFetchRunsRequestParams(searchFacets, experimentIds, cachedPinnedRuns.current);
+    const requestParams = createFetchRunsRequestParams(
+      searchFacets,
+      experimentIds,
+      cachedPinnedRuns.current,
+      dataProjection,
+    );
     if (!nextPageToken || !requestParams) {
       return [];
     }
@@ -209,6 +237,7 @@ export const useExperimentRuns = (
     runsData,
     isLoadingRuns: isLoadingRuns,
     lastFetchedTime,
+    dataProjection,
   });
 
   return {

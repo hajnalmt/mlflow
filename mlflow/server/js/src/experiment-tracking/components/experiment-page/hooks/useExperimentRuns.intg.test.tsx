@@ -519,6 +519,71 @@ describe('useExperimentRuns - integration test', () => {
     expect(jest.mocked(searchRunsApi).mock.lastCall?.[0].filter).toEqual('valid_filter');
   });
 
+  describe('data projection', () => {
+    const projectionRunsResponse = (metrics: { key: string; value: number }[]) => ({
+      runs: [
+        {
+          info: { runUuid: 'run_1', experimentId: 'test-experiment', runName: 'run_1', lifecycleStage: 'active' },
+          data: {
+            metrics: metrics.map((metric) => ({ ...metric, timestamp: 100, step: 1 })),
+            params: [],
+            tags: [],
+          },
+        },
+        {
+          info: { runUuid: 'run_2', experimentId: 'test-experiment', runName: 'run_2', lifecycleStage: 'active' },
+          data: { metrics: [], params: [], tags: [] },
+        },
+      ],
+    });
+
+    const renderWithProjection = (initialProjection?: { metric_keys: string[]; param_keys: string[] }) =>
+      renderHook(
+        ({ dataProjection }: { dataProjection?: { metric_keys: string[]; param_keys: string[] } }) =>
+          useExperimentRuns(testUiState, testSearchFacets, testExperimentIds, false, dataProjection),
+        {
+          wrapper: ({ children }) => <Provider store={store}>{children}</Provider>,
+          initialProps: { dataProjection: initialProjection },
+        },
+      );
+
+    beforeEach(() => {
+      jest.mocked(searchRunsApi).mockClear();
+      jest.mocked(searchRunsApi).mockImplementation(() => ({
+        type: 'SEARCH_RUNS_API',
+        payload: Promise.resolve(projectionRunsResponse([{ key: 'm1', value: 1 }])),
+        meta: { id: 0 },
+      }));
+    });
+
+    test('should request only the projected metrics and params, and again when the projection changes', async () => {
+      const { result, rerender } = renderWithProjection({ metric_keys: ['m1'], param_keys: [] });
+      await waitFor(() => expect(result.current.isLoadingRuns).toEqual(false));
+
+      expect(searchRunsApi).toHaveBeenCalledTimes(1);
+      expect(searchRunsApi).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dataProjection: { metric_keys: ['m1'], param_keys: [] } }),
+      );
+
+      // A projection with the same content does not trigger another request
+      rerender({ dataProjection: { metric_keys: ['m1'], param_keys: [] } });
+      expect(searchRunsApi).toHaveBeenCalledTimes(1);
+
+      rerender({ dataProjection: { metric_keys: ['m1', 'm2'], param_keys: ['p1'] } });
+      await waitFor(() => expect(searchRunsApi).toHaveBeenCalledTimes(2));
+      expect(searchRunsApi).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dataProjection: { metric_keys: ['m1', 'm2'], param_keys: ['p1'] } }),
+      );
+    });
+
+    test('should request all metrics and params when there is no projection', async () => {
+      const { result } = renderWithProjection(undefined);
+      await waitFor(() => expect(result.current.isLoadingRuns).toEqual(false));
+
+      expect(jest.mocked(searchRunsApi).mock.lastCall?.[0].dataProjection).toBeUndefined();
+    });
+  });
+
   test('should use quick regexp-based filter when necessary', async () => {
     jest.mocked(shouldUseRegexpBasedAutoRunsSearchFilter).mockImplementation(() => true);
 

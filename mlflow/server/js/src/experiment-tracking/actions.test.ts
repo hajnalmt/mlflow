@@ -314,6 +314,23 @@ const searchRunsPayloadTests = () => {
       expect.objectContaining({ filter: "run_id IN ('r1','r2')", run_view_type: ViewType.ALL }),
     );
   });
+  it('should request only the projected metrics and params, also for the pinned runs', async () => {
+    const dataProjection = { metric_keys: ['m1'], param_keys: ['p1'] };
+    await searchRunsPayload({ shouldFetchParents: false, runsPinned: ['r1'], dataProjection });
+
+    expect(MlflowService.searchRuns).toHaveBeenCalledTimes(2);
+    (MlflowService.searchRuns as any).mock.calls.forEach(([request]: any[]) => {
+      expect(request.data_projection).toEqual(dataProjection);
+    });
+  });
+  it('should request all metrics and params when there is no projection', async () => {
+    await searchRunsPayload({ shouldFetchParents: false, runsPinned: ['r1'] });
+
+    expect(MlflowService.searchRuns).toHaveBeenCalledTimes(2);
+    (MlflowService.searchRuns as any).mock.calls.forEach(([request]: any[]) => {
+      expect(request).not.toHaveProperty('data_projection');
+    });
+  });
   it('should properly fetch for pinned runs and calculate runs matching filter', async () => {
     // Create mocked version of searchRuns() that will return
     // a specialized set of runs when asked for pinned runs

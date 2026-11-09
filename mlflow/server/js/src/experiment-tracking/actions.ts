@@ -315,6 +315,9 @@ export const searchRunsPayload = ({
 
   // Array of pinned row IDs which will be fetched with another request
   runsPinned,
+
+  // If set, only the listed metrics and params are returned for each run
+  dataProjection,
 }: any) => {
   // Let's start with the base request for the runs
   const promises = [
@@ -325,6 +328,7 @@ export const searchRunsPayload = ({
       max_results: maxResults || RUNS_SEARCH_MAX_RESULTS,
       order_by: orderBy,
       page_token: pageToken,
+      ...(dataProjection && { data_projection: dataProjection }),
     }),
   ];
 
@@ -336,6 +340,7 @@ export const searchRunsPayload = ({
         experiment_ids: experimentIds,
         filter: createPinnedRowsExpression(runsPinned),
         run_view_type: ViewType.ALL,
+        ...(dataProjection && { data_projection: dataProjection }),
       }),
     );
   }
