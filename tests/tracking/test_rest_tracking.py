@@ -3200,23 +3200,41 @@ def test_get_experiment_run_data_keys_rest(mlflow_client):
     )
     url = f"{mlflow_client.tracking_uri}/api/3.0/mlflow/experiments/get-run-data-keys"
 
-    response = requests.post(url, json={"experiment_ids": [experiment_id]})
-    assert response.status_code == 200, response.text
-    assert response.json() == {"metric_keys": ["m1", "m2"], "param_keys": ["p1", "p2"]}
+    def _get_keys(**body):
+        response = requests.post(url, json=body)
+        assert response.status_code == 200, response.text
+        keys = response.json()
+        return keys.get("metric_keys", []), keys.get("param_keys", []), keys
 
-    response = requests.post(url, json={"experiment_ids": [experiment_id, other_experiment_id]})
-    assert response.json() == {
-        "metric_keys": ["m1", "m2", "other_metric"],
-        "param_keys": ["other_p", "p1", "p2"],
-    }
+    metric_keys, param_keys, keys = _get_keys(experiment_ids=[experiment_id])
+    assert (metric_keys, param_keys) == (["m1", "m2"], ["p1", "p2"])
+    assert not keys["metric_keys_truncated"]
+    assert not keys["param_keys_truncated"]
+
+    metric_keys, param_keys, _ = _get_keys(experiment_ids=[experiment_id, other_experiment_id])
+    assert (metric_keys, param_keys) == (["m1", "m2", "other_metric"], ["other_p", "p1", "p2"])
+
+    # Search is case-insensitive and applies to metrics and params
+    metric_keys, param_keys, _ = _get_keys(
+        experiment_ids=[experiment_id, other_experiment_id], search="OTHER"
+    )
+    assert (metric_keys, param_keys) == (["other_metric"], ["other_p"])
+
+    # Keys are limited per type and the result is flagged as truncated
+    metric_keys, param_keys, keys = _get_keys(
+        experiment_ids=[experiment_id, other_experiment_id], max_results=2
+    )
+    assert (metric_keys, param_keys) == (["m1", "m2"], ["other_p", "p1"])
+    assert keys["metric_keys_truncated"]
+    assert keys["param_keys_truncated"]
 
     mlflow_client.delete_run(run_id)
-    response = requests.post(url, json={"experiment_ids": [experiment_id]})
-    assert response.json() == {}
-    response = requests.post(
-        url, json={"experiment_ids": [experiment_id], "run_view_type": "DELETED_ONLY"}
+    metric_keys, param_keys, _ = _get_keys(experiment_ids=[experiment_id])
+    assert (metric_keys, param_keys) == ([], [])
+    metric_keys, param_keys, _ = _get_keys(
+        experiment_ids=[experiment_id], run_view_type="DELETED_ONLY"
     )
-    assert response.json() == {"metric_keys": ["m1", "m2"], "param_keys": ["p1", "p2"]}
+    assert (metric_keys, param_keys) == (["m1", "m2"], ["p1", "p2"])
 
 
 def test_get_experiment_run_data_keys_rest_requires_experiment_ids(mlflow_client):

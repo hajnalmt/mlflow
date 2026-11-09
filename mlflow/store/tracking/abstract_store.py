@@ -1115,7 +1115,11 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
         """
 
     def get_run_data_keys(
-        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+        self,
+        experiment_ids: list[str],
+        run_view_type: ViewType = ViewType.ACTIVE_ONLY,
+        search: str | None = None,
+        max_results: int | None = None,
     ) -> RunDataKeys:
         """
         Return the distinct metric and param keys that are logged on the runs of the given
@@ -1125,10 +1129,15 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
         Args:
             experiment_ids: List of experiment ids to collect the keys of.
             run_view_type: ACTIVE_ONLY, DELETED_ONLY, or ALL runs.
+            search: If set, only keys that contain this text (case-insensitive) are returned.
+            max_results: Maximum number of metric keys and of param keys to return, each. If
+                ``None``, all matching keys are returned.
 
         Returns:
             A :py:class:`mlflow.entities.run_data_keys.RunDataKeys` holding the sorted, distinct
-            keys of the (latest) metrics and of the params.
+            keys of the (latest) metrics and of the params. If more keys than ``max_results``
+            matched, the first ones in sorted order are returned and the matching ``*_truncated``
+            flag is set.
         """
         raise MlflowNotImplementedException(
             f"{self.__class__.__name__} does not support `get_run_data_keys`."

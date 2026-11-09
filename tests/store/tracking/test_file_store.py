@@ -1449,6 +1449,28 @@ def test_get_run_data_keys(store):
     assert keys.metric_keys == ("m1", "nested/m", "other_m")
 
 
+def test_get_run_data_keys_search_and_max_results(store):
+    exp = store.create_experiment("test_get_run_data_keys_search")
+    run_id = store.create_run(exp, "user", 1000, [], "name").info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric(f"eval/m{i}", 1.0, 1, 0) for i in range(5)]
+        + [Metric("Train/LOSS", 1, 1, 0)],
+        params=[Param("lr", "1"), Param("loss_weight", "2")],
+        tags=[],
+    )
+
+    keys = store.get_run_data_keys([exp], search="loss")
+    assert keys.metric_keys == ("Train/LOSS",)
+    assert keys.param_keys == ("loss_weight",)
+
+    keys = store.get_run_data_keys([exp], max_results=2)
+    assert keys.metric_keys == ("Train/LOSS", "eval/m0")
+    assert keys.metric_keys_truncated is True
+    assert keys.param_keys == ("loss_weight", "lr")
+    assert keys.param_keys_truncated is False
+
+
 def test_search_runs_data_projection(store):
     exp = store.create_experiment("test_search_runs_data_projection")
     run_id = store.create_run(exp, "user", 1000, [], "name").info.run_id

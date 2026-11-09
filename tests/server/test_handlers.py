@@ -859,9 +859,14 @@ def test_get_experiment_run_data_keys(mock_get_request_message, mock_tracking_st
     response = _get_experiment_run_data_keys()
 
     mock_tracking_store.get_run_data_keys.assert_called_once_with(
-        experiment_ids=["0", "1"], run_view_type=ViewType.ALL
+        experiment_ids=["0", "1"], run_view_type=ViewType.ALL, search=None, max_results=1000
     )
-    assert json.loads(response.get_data()) == {"metric_keys": ["m1", "m2"], "param_keys": ["p1"]}
+    assert json.loads(response.get_data()) == {
+        "metric_keys": ["m1", "m2"],
+        "param_keys": ["p1"],
+        "metric_keys_truncated": False,
+        "param_keys_truncated": False,
+    }
 
 
 def test_get_experiment_run_data_keys_defaults_to_active_runs(
@@ -892,6 +897,43 @@ def test_get_experiment_run_data_keys_validates_experiment_ids(
 
     assert response.status_code == 400
     assert expected_message in json.loads(response.get_data())["message"]
+    mock_tracking_store.get_run_data_keys.assert_not_called()
+
+
+def test_get_experiment_run_data_keys_search_and_max_results(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], search="loss", max_results=50
+    )
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys(
+        metric_keys=["loss"], metric_keys_truncated=True
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    kwargs = mock_tracking_store.get_run_data_keys.call_args.kwargs
+    assert kwargs["search"] == "loss"
+    assert kwargs["max_results"] == 50
+    assert json.loads(response.get_data()) == {
+        "metric_keys": ["loss"],
+        "metric_keys_truncated": True,
+        "param_keys_truncated": False,
+    }
+
+
+@pytest.mark.parametrize("max_results", [0, -1, 10001])
+def test_get_experiment_run_data_keys_validates_max_results(
+    mock_get_request_message, mock_tracking_store, max_results
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], max_results=max_results
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 400
+    assert "max_results" in json.loads(response.get_data())["message"]
     mock_tracking_store.get_run_data_keys.assert_not_called()
 
 

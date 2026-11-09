@@ -2399,6 +2399,7 @@ def get_metric_history_bulk_interval_impl(request_message):
 
 
 MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST = 20
+MAX_RUN_DATA_KEYS_RESULTS = 10000
 
 
 @catch_mlflow_exception
@@ -2435,8 +2436,21 @@ def get_experiment_run_data_keys_impl(request_message):
     if request_message.HasField("run_view_type"):
         run_view_type = ViewType.from_proto(request_message.run_view_type)
 
+    max_results = request_message.max_results
+    if not 1 <= max_results <= MAX_RUN_DATA_KEYS_RESULTS:
+        raise MlflowException(
+            message=(
+                f"Invalid value for request parameter max_results. It must be between 1 and "
+                f"{MAX_RUN_DATA_KEYS_RESULTS}, but got value {max_results}."
+            ),
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+
     run_data_keys = _get_tracking_store().get_run_data_keys(
-        experiment_ids=experiment_ids, run_view_type=run_view_type
+        experiment_ids=experiment_ids,
+        run_view_type=run_view_type,
+        search=request_message.search or None,
+        max_results=max_results,
     )
     response_message = GetExperimentRunDataKeys.Response()
     response_message.MergeFrom(run_data_keys.to_proto())

@@ -2333,12 +2333,12 @@ def test_get_experiment_run_data_keys_authorization(client, monkeypatch):
         url, json={"experiment_ids": [exp1_id, exp2_id]}, auth=(username1, password1)
     )
     assert response.status_code == 200
-    assert response.json() == {"metric_keys": ["m1"]}
+    assert response.json()["metric_keys"] == ["m1"]
 
     # user2 may read the keys of the experiment they can read ...
     response = requests.post(url, json={"experiment_ids": [exp1_id]}, auth=(username2, password2))
     assert response.status_code == 200
-    assert response.json() == {"metric_keys": ["m1"]}
+    assert response.json()["metric_keys"] == ["m1"]
 
     # ... but not as soon as one of the requested experiments is not readable
     response = requests.post(

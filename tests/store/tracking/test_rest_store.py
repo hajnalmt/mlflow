@@ -618,11 +618,15 @@ def test_get_run_data_keys():
         mock_http.return_value.text = json.dumps({
             "metric_keys": ["m1", "m2"],
             "param_keys": ["p1"],
+            "metric_keys_truncated": True,
         })
-        keys = store.get_run_data_keys(["0", 1], ViewType.ALL)
+        keys = store.get_run_data_keys(["0", 1], ViewType.ALL, search="loss", max_results=5)
 
         expected_message = GetExperimentRunDataKeys(
-            experiment_ids=["0", "1"], run_view_type=ViewType.to_proto(ViewType.ALL)
+            experiment_ids=["0", "1"],
+            run_view_type=ViewType.to_proto(ViewType.ALL),
+            search="loss",
+            max_results=5,
         )
         _verify_requests(
             mock_http,
@@ -631,7 +635,9 @@ def test_get_run_data_keys():
             "POST",
             message_to_json(expected_message),
         )
-        assert keys == RunDataKeys(metric_keys=["m1", "m2"], param_keys=["p1"])
+        assert keys == RunDataKeys(
+            metric_keys=["m1", "m2"], param_keys=["p1"], metric_keys_truncated=True
+        )
 
 
 def test_search_runs_data_projection():

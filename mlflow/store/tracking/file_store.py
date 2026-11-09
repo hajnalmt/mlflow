@@ -1081,7 +1081,11 @@ class FileStore(AbstractStore):
         return runs, next_page_token
 
     def get_run_data_keys(
-        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+        self,
+        experiment_ids: list[str],
+        run_view_type: ViewType = ViewType.ACTIVE_ONLY,
+        search: str | None = None,
+        max_results: int | None = None,
     ) -> RunDataKeys:
         metric_keys = set()
         param_keys = set()
@@ -1090,7 +1094,7 @@ class FileStore(AbstractStore):
                 # The file names are the keys of the metrics and params
                 metric_keys.update(self._get_run_files(run_info, "metric")[1])
                 param_keys.update(self._get_run_files(run_info, "param")[1])
-        return RunDataKeys(metric_keys=metric_keys, param_keys=param_keys)
+        return RunDataKeys.from_keys(metric_keys, param_keys, search, max_results)
 
     def log_metric(self, run_id: str, metric: Metric):
         _validate_run_id(run_id)

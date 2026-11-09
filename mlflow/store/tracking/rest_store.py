@@ -1404,12 +1404,18 @@ class RestStore(
         return PagedList(metric_history, response_proto.next_page_token or None)
 
     def get_run_data_keys(
-        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+        self,
+        experiment_ids: list[str],
+        run_view_type: ViewType = ViewType.ACTIVE_ONLY,
+        search: str | None = None,
+        max_results: int | None = None,
     ) -> RunDataKeys:
         req_body = message_to_json(
             GetExperimentRunDataKeys(
                 experiment_ids=[str(experiment_id) for experiment_id in experiment_ids],
                 run_view_type=ViewType.to_proto(run_view_type),
+                search=search,
+                max_results=max_results,
             )
         )
         response_proto = self._call_endpoint(GetExperimentRunDataKeys, req_body)

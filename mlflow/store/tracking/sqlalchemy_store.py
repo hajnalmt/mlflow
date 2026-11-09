@@ -2316,7 +2316,11 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         return runs_with_inputs_outputs, next_page_token
 
     def get_run_data_keys(
-        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+        self,
+        experiment_ids: list[str],
+        run_view_type: ViewType = ViewType.ACTIVE_ONLY,
+        search: str | None = None,
+        max_results: int | None = None,
     ) -> RunDataKeys:
         stages = set(LifecycleStage.view_type_to_stages(run_view_type))
 
@@ -2332,12 +2336,26 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
                         SqlRun.lifecycle_stage.in_(stages),
                     )
                     .distinct()
+                    .order_by(model.key)
                 )
-                return session.execute(stmt).scalars().all()
+                if search:
+                    stmt = stmt.where(
+                        sqlalchemy.func.lower(model.key).contains(search.lower(), autoescape=True)
+                    )
+                if max_results is not None:
+                    # Fetch one more key than requested to find out if the result is truncated
+                    stmt = stmt.limit(max_results + 1)
+                keys = session.execute(stmt).scalars().all()
+                truncated = max_results is not None and len(keys) > max_results
+                return (keys[:max_results] if truncated else keys), truncated
 
+            metric_keys, metric_keys_truncated = _distinct_keys(SqlLatestMetric)
+            param_keys, param_keys_truncated = _distinct_keys(SqlParam)
             return RunDataKeys(
-                metric_keys=_distinct_keys(SqlLatestMetric),
-                param_keys=_distinct_keys(SqlParam),
+                metric_keys=metric_keys,
+                param_keys=param_keys,
+                metric_keys_truncated=metric_keys_truncated,
+                param_keys_truncated=param_keys_truncated,
             )
 
     def log_batch(self, run_id, metrics, params, tags):

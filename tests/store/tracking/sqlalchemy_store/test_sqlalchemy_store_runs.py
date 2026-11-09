@@ -1799,6 +1799,84 @@ def test_get_run_data_keys_respects_run_view_type(store: SqlAlchemyStore):
     assert everything.param_keys == ("active_p", "deleted_p")
 
 
+def _log_many_keys(store: SqlAlchemyStore, exp):
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric(f"eval/ds{i:02d}/loss", 1.0, 1, 0) for i in range(10)]
+        + [Metric("train/accuracy", 1.0, 1, 0)],
+        params=[Param(f"param_{i}", "v") for i in range(5)] + [Param("Loss_weight", "1")],
+        tags=[],
+    )
+
+
+def test_get_run_data_keys_search(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_search")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], search="LOSS")
+
+    # Case-insensitive substring match on both metrics and params
+    assert keys.metric_keys == tuple(f"eval/ds{i:02d}/loss" for i in range(10))
+    assert keys.param_keys == ("Loss_weight",)
+    assert not keys.metric_keys_truncated
+    assert not keys.param_keys_truncated
+
+
+@pytest.mark.parametrize(
+    ("search", "expected"),
+    [
+        # "_" is a LIKE wildcard for any single character, but must only match a literal "_"
+        ("a_b", ("a_b",)),
+        ("_", ("a_b",)),
+        # "%" is a LIKE wildcard for any text, but must only match a literal "%"
+        ("%", ()),
+        ("a%b", ()),
+        ("\\", ()),
+    ],
+)
+def test_get_run_data_keys_search_treats_wildcards_literally(
+    store: SqlAlchemyStore, search, expected
+):
+    exp = _create_experiments(store, "test_get_run_data_keys_search_wildcards")
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric("a_b", 1.0, 1, 0), Metric("aXb", 1.0, 1, 0)],
+        params=[],
+        tags=[],
+    )
+
+    assert store.get_run_data_keys([exp], search=search).metric_keys == expected
+
+
+def test_get_run_data_keys_max_results_truncates_per_type(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_max_results")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], max_results=3)
+
+    # The first keys in sorted order are returned, and metrics and params are limited separately
+    assert keys.metric_keys == ("eval/ds00/loss", "eval/ds01/loss", "eval/ds02/loss")
+    assert keys.metric_keys_truncated is True
+    assert keys.param_keys == ("Loss_weight", "param_0", "param_1")
+    assert keys.param_keys_truncated is True
+
+
+def test_get_run_data_keys_max_results_equal_to_matches_is_not_truncated(
+    store: SqlAlchemyStore,
+):
+    exp = _create_experiments(store, "test_get_run_data_keys_max_results_exact")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], search="param_", max_results=5)
+
+    assert len(keys.param_keys) == 5
+    assert keys.param_keys_truncated is False
+    assert keys.metric_keys == ()
+    assert keys.metric_keys_truncated is False
+
+
 def test_get_run_data_keys_can_be_used_as_data_projection(store: SqlAlchemyStore):
     exp = _create_experiments(store, "test_get_run_data_keys_as_projection")
     _log_projection_test_runs(store, exp)
