@@ -15,7 +15,7 @@ import {
   usePageTitle,
   useSearchParams,
 } from './common/utils/RoutingUtils';
-import { useWorkflowType, WorkflowType, WorkflowTypeProvider } from './common/contexts/WorkflowTypeContext';
+import { WorkflowTypeProvider } from './common/contexts/WorkflowTypeContext';
 import { MlflowSidebarContext } from './common/contexts/MlflowSidebarContext';
 import { shouldEnableWorkflowBasedNavigation } from './common/utils/FeatureUtils';
 import { useWorkspacesEnabled } from './experiment-tracking/hooks/useServerInfo';
@@ -73,7 +73,6 @@ const MlflowRootLayout = ({
   setShowSidebar: (showSidebar: boolean) => void;
 }) => {
   const { theme } = useDesignSystemTheme();
-  const { workflowType } = useWorkflowType();
 
   // Expose the app-shell sidebar toggle so deep pages (e.g. the review-queue
   // focused view) can collapse it and restore the prior state. See
@@ -92,10 +91,7 @@ const MlflowRootLayout = ({
                 display: 'flex',
                 flexDirection: 'row',
                 width: '100%',
-                background:
-                  workflowType === WorkflowType.GENAI
-                    ? `linear-gradient(163deg, rgba(66, 153, 224, 0.06) 20%, rgba(202, 66, 224, 0.06) 35%, rgba(255, 95, 70, 0.06) 50%, transparent 80%), ${theme.colors.backgroundSecondary}`
-                    : theme.colors.backgroundSecondary,
+                background: theme.colors.backgroundSecondary,
               }}
             >
               <MlflowSidebar showSidebar={showSidebar} setShowSidebar={setShowSidebar} />
