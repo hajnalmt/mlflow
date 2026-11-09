@@ -69,6 +69,7 @@ from mlflow.entities.logged_model_status import LoggedModelStatus
 from mlflow.entities.logged_model_tag import LoggedModelTag
 from mlflow.entities.metric import Metric, MetricWithRunId
 from mlflow.entities.model_registry import PromptVersion
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.span import LazySpan
 from mlflow.entities.span_status import SpanStatusCode
@@ -2313,6 +2314,31 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
                 runs_with_inputs_outputs = runs_with_inputs_outputs[:max_results]
 
         return runs_with_inputs_outputs, next_page_token
+
+    def get_run_data_keys(
+        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+    ) -> RunDataKeys:
+        stages = set(LifecycleStage.view_type_to_stages(run_view_type))
+
+        with self.ManagedSessionMaker() as session:
+            experiment_ids = self._filter_experiment_ids(session, [int(e) for e in experiment_ids])
+
+            def _distinct_keys(model):
+                stmt = (
+                    select(model.key)
+                    .join(SqlRun, SqlRun.run_uuid == model.run_uuid)
+                    .where(
+                        SqlRun.experiment_id.in_(experiment_ids),
+                        SqlRun.lifecycle_stage.in_(stages),
+                    )
+                    .distinct()
+                )
+                return session.execute(stmt).scalars().all()
+
+            return RunDataKeys(
+                metric_keys=_distinct_keys(SqlLatestMetric),
+                param_keys=_distinct_keys(SqlParam),
+            )
 
     def log_batch(self, run_id, metrics, params, tags):
         _validate_run_id(run_id)

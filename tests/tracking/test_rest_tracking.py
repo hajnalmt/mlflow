@@ -3191,6 +3191,43 @@ def test_search_runs_data_projection_rest(mlflow_client):
     assert "params" not in run["data"]
 
 
+def test_get_experiment_run_data_keys_rest(mlflow_client):
+    experiment_id, run_id = _create_run_with_data_for_projection(mlflow_client)
+    other_experiment_id = mlflow_client.create_experiment("DataKeysOtherExperiment")
+    other_run_id = mlflow_client.create_run(other_experiment_id).info.run_id
+    mlflow_client.log_batch(
+        other_run_id, metrics=[Metric("other_metric", 1.0, 1, 0)], params=[Param("other_p", "z")]
+    )
+    url = f"{mlflow_client.tracking_uri}/api/3.0/mlflow/experiments/get-run-data-keys"
+
+    response = requests.post(url, json={"experiment_ids": [experiment_id]})
+    assert response.status_code == 200, response.text
+    assert response.json() == {"metric_keys": ["m1", "m2"], "param_keys": ["p1", "p2"]}
+
+    response = requests.post(url, json={"experiment_ids": [experiment_id, other_experiment_id]})
+    assert response.json() == {
+        "metric_keys": ["m1", "m2", "other_metric"],
+        "param_keys": ["other_p", "p1", "p2"],
+    }
+
+    mlflow_client.delete_run(run_id)
+    response = requests.post(url, json={"experiment_ids": [experiment_id]})
+    assert response.json() == {}
+    response = requests.post(
+        url, json={"experiment_ids": [experiment_id], "run_view_type": "DELETED_ONLY"}
+    )
+    assert response.json() == {"metric_keys": ["m1", "m2"], "param_keys": ["p1", "p2"]}
+
+
+def test_get_experiment_run_data_keys_rest_requires_experiment_ids(mlflow_client):
+    url = f"{mlflow_client.tracking_uri}/api/3.0/mlflow/experiments/get-run-data-keys"
+
+    response = requests.post(url, json={"experiment_ids": []})
+
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "INVALID_PARAMETER_VALUE"
+
+
 def test_search_runs_data_projection_graphql(mlflow_client):
     experiment_id, run_id = _create_run_with_data_for_projection(mlflow_client)
 

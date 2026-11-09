@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         OnlineScoringConfig,
     )
 from mlflow.entities.metric import MetricWithRunId
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.entities.trace import Span, Trace
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.workspace import TraceArchivalConfig
@@ -1112,6 +1113,26 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
             :py:class:`mlflow.entities.Run` objects that satisfy the search expressions,
             and ``token`` is the pagination token for the next page of results.
         """
+
+    def get_run_data_keys(
+        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+    ) -> RunDataKeys:
+        """
+        Return the distinct metric and param keys that are logged on the runs of the given
+        experiments, without their values. The returned keys can be used to build a
+        ``data_projection`` for ``search_runs``.
+
+        Args:
+            experiment_ids: List of experiment ids to collect the keys of.
+            run_view_type: ACTIVE_ONLY, DELETED_ONLY, or ALL runs.
+
+        Returns:
+            A :py:class:`mlflow.entities.run_data_keys.RunDataKeys` holding the sorted, distinct
+            keys of the (latest) metrics and of the params.
+        """
+        raise MlflowNotImplementedException(
+            f"{self.__class__.__name__} does not support `get_run_data_keys`."
+        )
 
     @abstractmethod
     def log_batch(self, run_id, metrics, params, tags):

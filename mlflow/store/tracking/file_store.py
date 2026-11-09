@@ -42,6 +42,7 @@ from mlflow.entities import (
     _DatasetSummary,
 )
 from mlflow.entities.lifecycle_stage import LifecycleStage
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.entities.run_info import check_run_is_active
 from mlflow.entities.trace_info_v2 import TraceInfoV2
 from mlflow.entities.trace_status import TraceStatus
@@ -1078,6 +1079,18 @@ class FileStore(AbstractStore):
             # applied to the page of runs that is returned.
             runs = [data_projection.apply(run) for run in runs]
         return runs, next_page_token
+
+    def get_run_data_keys(
+        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+    ) -> RunDataKeys:
+        metric_keys = set()
+        param_keys = set()
+        for experiment_id in experiment_ids:
+            for run_info in self._list_run_infos(experiment_id, run_view_type):
+                # The file names are the keys of the metrics and params
+                metric_keys.update(self._get_run_files(run_info, "metric")[1])
+                param_keys.update(self._get_run_files(run_info, "param")[1])
+        return RunDataKeys(metric_keys=metric_keys, param_keys=param_keys)
 
     def log_metric(self, run_id: str, metric: Metric):
         _validate_run_id(run_id)

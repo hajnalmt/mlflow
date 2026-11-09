@@ -46,6 +46,7 @@ from mlflow.entities.model_registry import (
 from mlflow.entities.model_registry.prompt_version import IS_PROMPT_TAG_KEY, PROMPT_TEXT_TAG_KEY
 from mlflow.entities.presigned_download import PresignedDownloadUrlResponse
 from mlflow.entities.presigned_upload import CreatePresignedUploadResponse
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_location import TraceLocation as EntityTraceLocation
 from mlflow.entities.trace_metrics import (
@@ -125,6 +126,7 @@ from mlflow.protos.service_pb2 import (
     DeleteTraceTag,
     DeleteTraceTagV3,
     GatewayEndpoint,
+    GetExperimentRunDataKeys,
     GetGatewayEndpoint,
     GetScorer,
     GetTrace,
@@ -194,6 +196,7 @@ from mlflow.server.handlers import (
     _get_dataset_experiment_ids_handler,
     _get_dataset_handler,
     _get_dataset_records_handler,
+    _get_experiment_run_data_keys,
     _get_gateway_endpoint,
     _get_issue,
     _get_latest_versions,
@@ -843,6 +846,64 @@ def test_search_runs_without_data_projection_does_not_pass_it_to_store(
 
     # Stores without projection support must not receive the argument.
     assert "data_projection" not in mock_tracking_store.search_runs.call_args.kwargs
+
+
+def test_get_experiment_run_data_keys(mock_get_request_message, mock_tracking_store):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0", "1"], run_view_type=ViewType.to_proto(ViewType.ALL)
+    )
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys(
+        metric_keys=["m2", "m1"], param_keys=["p1"]
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    mock_tracking_store.get_run_data_keys.assert_called_once_with(
+        experiment_ids=["0", "1"], run_view_type=ViewType.ALL
+    )
+    assert json.loads(response.get_data()) == {"metric_keys": ["m1", "m2"], "param_keys": ["p1"]}
+
+
+def test_get_experiment_run_data_keys_defaults_to_active_runs(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(experiment_ids=["0"])
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys()
+
+    _get_experiment_run_data_keys()
+
+    kwargs = mock_tracking_store.get_run_data_keys.call_args.kwargs
+    assert kwargs["run_view_type"] == ViewType.ACTIVE_ONLY
+
+
+@pytest.mark.parametrize(
+    ("experiment_ids", "expected_message"),
+    [
+        ([], "must specify at least one experiment_id"),
+        ([str(i) for i in range(21)], "cannot specify more than 20 experiment_ids"),
+    ],
+)
+def test_get_experiment_run_data_keys_validates_experiment_ids(
+    mock_get_request_message, mock_tracking_store, experiment_ids, expected_message
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(experiment_ids=experiment_ids)
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 400
+    assert expected_message in json.loads(response.get_data())["message"]
+    mock_tracking_store.get_run_data_keys.assert_not_called()
+
+
+def test_get_experiment_run_data_keys_unsupported_store(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(experiment_ids=["0"])
+    mock_tracking_store.get_run_data_keys.side_effect = MlflowNotImplementedException("nope")
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 501
 
 
 def test_log_batch_api_req(mock_get_request_json):

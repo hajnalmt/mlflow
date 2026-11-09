@@ -1421,6 +1421,34 @@ def test_search_runs_pagination(store):
     assert result.token is None
 
 
+def test_get_run_data_keys(store):
+    exp1 = store.create_experiment("test_get_run_data_keys_1")
+    exp2 = store.create_experiment("test_get_run_data_keys_2")
+    run1 = store.create_run(exp1, "user", 1000, [], "name").info.run_id
+    run2 = store.create_run(exp1, "user", 1000, [], "name").info.run_id
+    other = store.create_run(exp2, "user", 1000, [], "name").info.run_id
+    store.log_batch(
+        run1,
+        metrics=[Metric("m1", 1.0, 1, 0), Metric("m1", 2.0, 2, 1), Metric("nested/m", 1.0, 1, 0)],
+        params=[Param("p1", "a")],
+        tags=[],
+    )
+    store.log_batch(run2, metrics=[Metric("m2", 1.0, 1, 0)], params=[Param("p2", "b")], tags=[])
+    store.log_batch(other, metrics=[Metric("other_m", 1.0, 1, 0)], params=[], tags=[])
+    store.delete_run(run2)
+
+    keys = store.get_run_data_keys([exp1])
+    assert keys.metric_keys == ("m1", "nested/m")
+    assert keys.param_keys == ("p1",)
+
+    keys = store.get_run_data_keys([exp1], ViewType.ALL)
+    assert keys.metric_keys == ("m1", "m2", "nested/m")
+    assert keys.param_keys == ("p1", "p2")
+
+    keys = store.get_run_data_keys([exp1, exp2], ViewType.ACTIVE_ONLY)
+    assert keys.metric_keys == ("m1", "nested/m", "other_m")
+
+
 def test_search_runs_data_projection(store):
     exp = store.create_experiment("test_search_runs_data_projection")
     run_id = store.create_run(exp, "user", 1000, [], "name").info.run_id

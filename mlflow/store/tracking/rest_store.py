@@ -29,6 +29,7 @@ from mlflow.entities import (
     ViewType,
 )
 from mlflow.entities.issue import IssueSeverity, IssueStatus
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.exceptions import MlflowNotImplementedException
 
 # Constants for Databricks API disabled decorator
@@ -110,6 +111,7 @@ from mlflow.protos.service_pb2 import (
     GetDatasetRecords,
     GetExperiment,
     GetExperimentByName,
+    GetExperimentRunDataKeys,
     GetLoggedModel,
     GetMetricHistory,
     GetRun,
@@ -1400,6 +1402,18 @@ class RestStore(
 
         metric_history = [Metric.from_proto(metric) for metric in response_proto.metrics]
         return PagedList(metric_history, response_proto.next_page_token or None)
+
+    def get_run_data_keys(
+        self, experiment_ids: list[str], run_view_type: ViewType = ViewType.ACTIVE_ONLY
+    ) -> RunDataKeys:
+        req_body = message_to_json(
+            GetExperimentRunDataKeys(
+                experiment_ids=[str(experiment_id) for experiment_id in experiment_ids],
+                run_view_type=ViewType.to_proto(run_view_type),
+            )
+        )
+        response_proto = self._call_endpoint(GetExperimentRunDataKeys, req_body)
+        return RunDataKeys.from_proto(response_proto)
 
     def _search_runs(
         self,

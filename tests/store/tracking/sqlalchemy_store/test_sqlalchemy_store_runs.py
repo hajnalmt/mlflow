@@ -1719,6 +1719,102 @@ def _log_projection_test_runs(store: SqlAlchemyStore, exp):
     return run_ids
 
 
+def test_get_run_data_keys(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys")
+    _log_projection_test_runs(store, exp)
+    # A second run in the same experiment that adds a new key and repeats existing ones
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric("m1", 5.0, 1, 0), Metric("m4", 4.0, 1, 0)],
+        params=[Param("p3", "c")],
+        tags=[],
+    )
+    # Several steps of the same metric must not yield duplicate keys
+    store.log_batch(
+        run_id,
+        metrics=[Metric("m4", 6.0, 2, 1), Metric("m4", 7.0, 3, 2)],
+        params=[],
+        tags=[],
+    )
+
+    keys = store.get_run_data_keys([exp])
+
+    assert keys.metric_keys == ("m1", "m2", "m3", "m4")
+    assert keys.param_keys == ("p1", "p2", "p3")
+
+
+def test_get_run_data_keys_without_data(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_without_data")
+    _run_factory(store, _get_run_configs(exp))
+
+    keys = store.get_run_data_keys([exp])
+
+    assert keys.metric_keys == ()
+    assert keys.param_keys == ()
+
+
+def test_get_run_data_keys_multiple_experiments(store: SqlAlchemyStore):
+    exp1, exp2, exp3 = _create_experiments(store, ["rdk_exp1", "rdk_exp2", "rdk_exp3"])
+    for exp, metric, param in [(exp1, "m1", "p1"), (exp2, "m2", "p2"), (exp3, "m3", "p3")]:
+        run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+        store.log_batch(
+            run_id, metrics=[Metric(metric, 1.0, 1, 0)], params=[Param(param, "v")], tags=[]
+        )
+
+    keys = store.get_run_data_keys([exp1, exp2])
+
+    # Keys of experiments that were not requested are not leaked
+    assert keys.metric_keys == ("m1", "m2")
+    assert keys.param_keys == ("p1", "p2")
+
+
+def test_get_run_data_keys_respects_run_view_type(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_run_view_type")
+    active_run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    deleted_run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        active_run_id,
+        metrics=[Metric("active_m", 1.0, 1, 0)],
+        params=[Param("active_p", "v")],
+        tags=[],
+    )
+    store.log_batch(
+        deleted_run_id,
+        metrics=[Metric("deleted_m", 1.0, 1, 0)],
+        params=[Param("deleted_p", "v")],
+        tags=[],
+    )
+    store.delete_run(deleted_run_id)
+
+    active = store.get_run_data_keys([exp])
+    assert (active.metric_keys, active.param_keys) == (("active_m",), ("active_p",))
+    assert store.get_run_data_keys([exp], ViewType.ACTIVE_ONLY) == active
+
+    deleted = store.get_run_data_keys([exp], ViewType.DELETED_ONLY)
+    assert (deleted.metric_keys, deleted.param_keys) == (("deleted_m",), ("deleted_p",))
+
+    everything = store.get_run_data_keys([exp], ViewType.ALL)
+    assert everything.metric_keys == ("active_m", "deleted_m")
+    assert everything.param_keys == ("active_p", "deleted_p")
+
+
+def test_get_run_data_keys_can_be_used_as_data_projection(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_as_projection")
+    _log_projection_test_runs(store, exp)
+
+    keys = store.get_run_data_keys([exp])
+    runs = store.search_runs(
+        [exp],
+        None,
+        ViewType.ALL,
+        data_projection=RunDataProjection(metric_keys=keys.metric_keys, param_keys=keys.param_keys),
+    )
+
+    assert all(set(r.data.metrics) == set(keys.metric_keys) for r in runs)
+    assert all(set(r.data.params) == set(keys.param_keys) for r in runs)
+
+
 def test_search_runs_data_projection(store: SqlAlchemyStore):
     exp = _create_experiments(store, "test_search_runs_data_projection")
     run_ids = _log_projection_test_runs(store, exp)

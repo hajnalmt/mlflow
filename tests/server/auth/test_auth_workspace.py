@@ -28,6 +28,8 @@ from mlflow.utils import workspace_context
 
 from tests.helper_functions import random_str
 
+GET_EXPERIMENT_RUN_DATA_KEYS = "/api/3.0/mlflow/experiments/get-run-data-keys"
+
 
 def test_cleanup_workspace_permissions_handler(monkeypatch):
     mock_delete_workspace_perms = Mock()
@@ -1805,6 +1807,17 @@ def test_search_datasets_validator_uses_workspace_permissions(workspace_permissi
         assert auth_module.validate_can_search_datasets()
 
 
+def test_get_experiment_run_data_keys_validator_uses_workspace_permissions(
+    workspace_permission_setup,
+):
+    with auth_module.app.test_request_context(
+        GET_EXPERIMENT_RUN_DATA_KEYS,
+        method="POST",
+        json={"experiment_ids": ["exp-1", "exp-2"]},
+    ):
+        assert auth_module.validate_can_get_experiment_run_data_keys()
+
+
 def test_create_promptlab_run_validator_uses_workspace_permissions(workspace_permission_setup):
     with auth_module.app.test_request_context(
         CREATE_PROMPTLAB_RUN,
@@ -1928,6 +1941,31 @@ def test_search_datasets_validator_denied_without_workspace_permission(
         json={"experiment_ids": ["exp-1", "exp-2"]},
     ):
         assert not auth_module.validate_can_search_datasets()
+
+
+def test_get_experiment_run_data_keys_validator_denied_without_workspace_permission(
+    workspace_permission_setup,
+):
+    store = workspace_permission_setup["store"]
+    username = workspace_permission_setup["username"]
+    _set_workspace_permission(store, username, NO_PERMISSIONS.name)
+
+    with auth_module.app.test_request_context(
+        GET_EXPERIMENT_RUN_DATA_KEYS,
+        method="POST",
+        json={"experiment_ids": ["exp-1", "exp-2"]},
+    ):
+        assert not auth_module.validate_can_get_experiment_run_data_keys()
+
+
+def test_get_experiment_run_data_keys_validator_requires_experiment_ids(
+    workspace_permission_setup,
+):
+    with auth_module.app.test_request_context(
+        GET_EXPERIMENT_RUN_DATA_KEYS, method="POST", json={"experiment_ids": []}
+    ):
+        with pytest.raises(MlflowException, match="must specify at least one experiment_id"):
+            auth_module.validate_can_get_experiment_run_data_keys()
 
 
 def test_create_promptlab_run_validator_denied_without_workspace_permission(

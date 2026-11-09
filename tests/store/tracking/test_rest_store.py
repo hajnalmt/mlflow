@@ -42,6 +42,7 @@ from mlflow.entities.assessment import (
 from mlflow.entities.assessment_error import AssessmentError
 from mlflow.entities.assessment_source import AssessmentSource, AssessmentSourceType
 from mlflow.entities.model_registry import PromptVersion
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.span import LiveSpan
 from mlflow.entities.trace import Trace
@@ -99,6 +100,7 @@ from mlflow.protos.service_pb2 import (
     GetDatasetExperimentIds,
     GetDatasetRecords,
     GetExperimentByName,
+    GetExperimentRunDataKeys,
     GetGatewayEndpoint,
     GetGatewayModelDefinition,
     GetGatewaySecretInfo,
@@ -606,6 +608,30 @@ def test_search_experiments():
                 )
             ),
         )
+
+
+def test_get_run_data_keys():
+    creds = MlflowHostCreds("https://hello")
+    store = RestStore(lambda: creds)
+
+    with mock_http_request() as mock_http:
+        mock_http.return_value.text = json.dumps({
+            "metric_keys": ["m1", "m2"],
+            "param_keys": ["p1"],
+        })
+        keys = store.get_run_data_keys(["0", 1], ViewType.ALL)
+
+        expected_message = GetExperimentRunDataKeys(
+            experiment_ids=["0", "1"], run_view_type=ViewType.to_proto(ViewType.ALL)
+        )
+        _verify_requests(
+            mock_http,
+            creds,
+            "experiments/get-run-data-keys",
+            "POST",
+            message_to_json(expected_message),
+        )
+        assert keys == RunDataKeys(metric_keys=["m1", "m2"], param_keys=["p1"])
 
 
 def test_search_runs_data_projection():

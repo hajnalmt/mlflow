@@ -237,6 +237,7 @@ from mlflow.protos.service_pb2 import (
     GetDatasetRecords,
     GetExperiment,
     GetExperimentByName,
+    GetExperimentRunDataKeys,
     GetGatewayBudgetPolicy,
     GetGatewayEndpoint,
     GetGatewayGuardrail,
@@ -2394,6 +2395,51 @@ def get_metric_history_bulk_interval_impl(request_message):
 
     response_message = GetMetricHistoryBulkInterval.Response()
     response_message.metrics.extend([m.to_proto() for m in metrics_with_run_ids])
+    return response_message
+
+
+MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST = 20
+
+
+@catch_mlflow_exception
+@_disable_if_artifacts_only
+def _get_experiment_run_data_keys():
+    request_message = _get_request_message(
+        GetExperimentRunDataKeys(),
+        schema={"experiment_ids": [_assert_required, _assert_array, _assert_item_type_string]},
+    )
+    response_message = get_experiment_run_data_keys_impl(request_message)
+    response = Response(mimetype="application/json")
+    response.set_data(message_to_json(response_message))
+    return response
+
+
+def get_experiment_run_data_keys_impl(request_message):
+    experiment_ids = list(request_message.experiment_ids)
+    if not experiment_ids:
+        raise MlflowException(
+            message="GetExperimentRunDataKeys request must specify at least one experiment_id.",
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+    if len(experiment_ids) > MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST:
+        raise MlflowException(
+            message=(
+                "GetExperimentRunDataKeys request cannot specify more than "
+                f"{MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST} experiment_ids. "
+                f"Received {len(experiment_ids)} experiment_ids."
+            ),
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+
+    run_view_type = ViewType.ACTIVE_ONLY
+    if request_message.HasField("run_view_type"):
+        run_view_type = ViewType.from_proto(request_message.run_view_type)
+
+    run_data_keys = _get_tracking_store().get_run_data_keys(
+        experiment_ids=experiment_ids, run_view_type=run_view_type
+    )
+    response_message = GetExperimentRunDataKeys.Response()
+    response_message.MergeFrom(run_data_keys.to_proto())
     return response_message
 
 
@@ -8151,6 +8197,7 @@ HANDLERS = {
     LogModel: _log_model,
     GetRun: _get_run,
     SearchRuns: _search_runs,
+    GetExperimentRunDataKeys: _get_experiment_run_data_keys,
     ListArtifacts: _list_artifacts,
     CreatePresignedUploadUrl: _create_presigned_upload_url,
     CreatePresignedDownloadUrl: _create_presigned_download_url,

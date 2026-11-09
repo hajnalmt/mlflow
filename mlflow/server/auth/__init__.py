@@ -178,6 +178,7 @@ from mlflow.protos.service_pb2 import (
     GetDatasetRecords,
     GetExperiment,
     GetExperimentByName,
+    GetExperimentRunDataKeys,
     GetGatewayEndpoint,
     GetGatewayGuardrail,
     GetGatewayModelDefinition,
@@ -2334,23 +2335,10 @@ def validate_can_read_metric_history_bulk_interval():
     return validate_can_read_metric_history_bulk(run_ids)
 
 
-def validate_can_search_datasets():
-    """Checks READ permission on all requested experiments."""
-    if request.method == "POST":
-        data = request.json
-        experiment_ids = data.get("experiment_ids", [])
-    else:
-        experiment_ids = request.args.getlist("experiment_ids")
-
-    if not experiment_ids:
-        raise MlflowException(
-            "SearchDatasets request must specify at least one experiment_id.",
-            INVALID_PARAMETER_VALUE,
-        )
-
+def _can_read_all_experiments(experiment_ids):
+    """Returns True if the authenticated user has READ permission on every given experiment."""
     username = authenticate_request().username
 
-    # Check permission for each experiment
     for experiment_id in experiment_ids:
         permission = _get_role_permission_or_default(
             _role_permission_for(
@@ -2366,6 +2354,34 @@ def validate_can_search_datasets():
             return False
 
     return True
+
+
+def validate_can_search_datasets():
+    """Checks READ permission on all requested experiments."""
+    if request.method == "POST":
+        data = request.json
+        experiment_ids = data.get("experiment_ids", [])
+    else:
+        experiment_ids = request.args.getlist("experiment_ids")
+
+    if not experiment_ids:
+        raise MlflowException(
+            "SearchDatasets request must specify at least one experiment_id.",
+            INVALID_PARAMETER_VALUE,
+        )
+
+    return _can_read_all_experiments(experiment_ids)
+
+
+def validate_can_get_experiment_run_data_keys():
+    """Checks READ permission on all requested experiments."""
+    experiment_ids = (request.get_json(silent=True) or {}).get("experiment_ids", [])
+    if not experiment_ids:
+        raise MlflowException(
+            "GetExperimentRunDataKeys request must specify at least one experiment_id.",
+            INVALID_PARAMETER_VALUE,
+        )
+    return _can_read_all_experiments(experiment_ids)
 
 
 def validate_can_create_promptlab_run():
@@ -2680,6 +2696,7 @@ BEFORE_REQUEST_HANDLERS = {
     # Routes for experiments
     CreateExperiment: validate_can_create_experiment,
     GetExperiment: validate_can_read_experiment,
+    GetExperimentRunDataKeys: validate_can_get_experiment_run_data_keys,
     GetExperimentByName: validate_can_read_experiment_by_name,
     DeleteExperiment: validate_can_delete_experiment,
     RestoreExperiment: validate_can_delete_experiment,

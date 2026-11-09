@@ -2314,6 +2314,44 @@ def test_graphql_search_runs_authorization(client, monkeypatch):
     [{"MLFLOW_AUTH_CONFIG_PATH": "fixtures/no_permission_auth.ini"}],
     indirect=True,
 )
+def test_get_experiment_run_data_keys_authorization(client, monkeypatch):
+    username1, password1 = create_user(client.tracking_uri)
+    username2, password2 = create_user(client.tracking_uri)
+    url = f"{client.tracking_uri}/api/3.0/mlflow/experiments/get-run-data-keys"
+
+    with User(username1, password1, monkeypatch):
+        exp1_id = client.create_experiment("run_data_keys_exp1")
+        exp2_id = client.create_experiment("run_data_keys_exp2")
+        run_id = client.create_run(exp1_id).info.run_id
+        client.log_metric(run_id, "m1", 1.0)
+
+        # Grant READ on exp1 to user2; no grant on exp2 (default_permission is NO_PERMISSIONS).
+        grant_role_permission(client.tracking_uri, username2, "experiment", exp1_id, "READ")
+
+    # The owner may read the keys of both experiments
+    response = requests.post(
+        url, json={"experiment_ids": [exp1_id, exp2_id]}, auth=(username1, password1)
+    )
+    assert response.status_code == 200
+    assert response.json() == {"metric_keys": ["m1"]}
+
+    # user2 may read the keys of the experiment they can read ...
+    response = requests.post(url, json={"experiment_ids": [exp1_id]}, auth=(username2, password2))
+    assert response.status_code == 200
+    assert response.json() == {"metric_keys": ["m1"]}
+
+    # ... but not as soon as one of the requested experiments is not readable
+    response = requests.post(
+        url, json={"experiment_ids": [exp1_id, exp2_id]}, auth=(username2, password2)
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "client",
+    [{"MLFLOW_AUTH_CONFIG_PATH": "fixtures/no_permission_auth.ini"}],
+    indirect=True,
+)
 def test_graphql_list_artifacts_authorization(client, monkeypatch):
     username1, password1 = create_user(client.tracking_uri)
     username2, password2 = create_user(client.tracking_uri)
