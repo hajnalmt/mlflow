@@ -549,9 +549,20 @@ describe('useExperimentRuns - integration test', () => {
 
     beforeEach(() => {
       jest.mocked(searchRunsApi).mockClear();
+      jest.mocked(loadMoreRunsApi).mockClear();
       jest.mocked(searchRunsApi).mockImplementation(() => ({
         type: 'SEARCH_RUNS_API',
         payload: Promise.resolve(projectionRunsResponse([{ key: 'm1', value: 1 }])),
+        meta: { id: 0 },
+      }));
+      jest.mocked(loadMoreRunsApi).mockImplementation(() => ({
+        type: 'LOAD_MORE_RUNS_API',
+        payload: Promise.resolve(
+          projectionRunsResponse([
+            { key: 'm1', value: 1 },
+            { key: 'm2', value: 2 },
+          ]),
+        ),
         meta: { id: 0 },
       }));
     });
@@ -581,6 +592,69 @@ describe('useExperimentRuns - integration test', () => {
       await waitFor(() => expect(result.current.isLoadingRuns).toEqual(false));
 
       expect(jest.mocked(searchRunsApi).mock.lastCall?.[0].dataProjection).toBeUndefined();
+    });
+
+    test('should load all metrics and params of the given runs only, without the projection', async () => {
+      const { result } = renderWithProjection({ metric_keys: ['m1'], param_keys: [] });
+      await waitFor(() => expect(result.current.isLoadingRuns).toEqual(false));
+      expect(result.current.runsData.metricKeyList).toEqual(['m1']);
+
+      await act(async () => {
+        await result.current.loadFullRunData(['run_1']);
+      });
+
+      expect(loadMoreRunsApi).toHaveBeenCalledTimes(1);
+      const request = jest.mocked(loadMoreRunsApi).mock.lastCall?.[0];
+      expect(request).toEqual(
+        expect.objectContaining({
+          experimentIds: ['test-experiment'],
+          filter: "run_id IN ('run_1')",
+          runViewType: 'ALL',
+          maxResults: 1,
+        }),
+      );
+      expect(request.dataProjection).toBeUndefined();
+      expect(result.current.isLoadingFullRunData).toEqual(false);
+      // The loaded metrics of the run are available now
+      expect(result.current.runsData.metricKeyList).toEqual(['m1', 'm2']);
+      expect(searchRunsApi).toHaveBeenCalledTimes(1);
+    });
+
+    test('should load the full data again after the runs are refreshed with the projection', async () => {
+      const { result } = renderWithProjection({ metric_keys: ['m1'], param_keys: [] });
+      await waitFor(() => expect(result.current.isLoadingRuns).toEqual(false));
+      await act(async () => {
+        await result.current.loadFullRunData(['run_1']);
+      });
+      expect(loadMoreRunsApi).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        result.current.refreshRuns();
+      });
+
+      await waitFor(() => expect(searchRunsApi).toHaveBeenCalledTimes(2));
+      // The refreshed run is requested in full again, the other one is not
+      await waitFor(() => expect(loadMoreRunsApi).toHaveBeenCalledTimes(2));
+      expect(jest.mocked(loadMoreRunsApi).mock.lastCall?.[0].filter).toEqual("run_id IN ('run_1')");
+      await waitFor(() => expect(result.current.runsData.metricKeyList).toEqual(['m1', 'm2']));
+    });
+
+    test('should report an error when the full data cannot be loaded', async () => {
+      jest.spyOn(Utils, 'logErrorAndNotifyUser').mockImplementation(() => {});
+      jest.mocked(loadMoreRunsApi).mockImplementation(() => ({
+        type: 'LOAD_MORE_RUNS_API',
+        payload: Promise.reject(new ErrorWrapper({ message: 'failed' })),
+        meta: { id: 0 },
+      }));
+      const { result } = renderWithProjection({ metric_keys: ['m1'], param_keys: [] });
+      await waitFor(() => expect(result.current.isLoadingRuns).toEqual(false));
+
+      await act(async () => {
+        await result.current.loadFullRunData(['run_1']);
+      });
+
+      expect(Utils.logErrorAndNotifyUser).toHaveBeenCalled();
+      expect(result.current.isLoadingFullRunData).toEqual(false);
     });
   });
 

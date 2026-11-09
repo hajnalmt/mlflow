@@ -125,6 +125,8 @@ export const ExperimentView = ({ showHeader = true }: { showHeader?: boolean }) 
     moreRunsAvailable,
     requestError: runsRequestError,
     refreshRuns,
+    loadFullRunData,
+    isLoadingFullRunData,
   } = useExperimentRuns(uiState, searchFacets, experimentIds, false, dataProjection);
 
   useEffect(() => {
@@ -304,6 +306,8 @@ export const ExperimentView = ({ showHeader = true }: { showHeader?: boolean }) 
         moreRunsAvailable={moreRunsAvailable}
         requestError={runsRequestError}
         refreshRuns={refreshRuns}
+        loadFullRunData={loadFullRunData}
+        isLoadingFullRunData={isLoadingFullRunData}
         uiState={uiState}
       />
     );

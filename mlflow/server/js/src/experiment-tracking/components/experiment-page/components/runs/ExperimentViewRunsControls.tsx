@@ -9,6 +9,7 @@ import type { ErrorWrapper } from '../../../../../common/utils/ErrorWrapper';
 import { ToggleButton, useDesignSystemTheme } from '@databricks/design-system';
 import { FormattedMessage } from 'react-intl';
 import { ExperimentViewRunsColumnSelector } from './ExperimentViewRunsColumnSelector';
+import { ExperimentViewRunsLoadFullDataButton } from './ExperimentViewRunsLoadFullDataButton';
 import { useExperimentPageViewMode } from '../../hooks/useExperimentPageViewMode';
 import Utils from '../../../../../common/utils/Utils';
 import { downloadRunsCsv } from '../../utils/experimentPage.common-utils';
@@ -36,6 +37,8 @@ type ExperimentViewRunsControlsProps = {
   requestError: ErrorWrapper | Error | null;
 
   refreshRuns: () => void;
+  loadFullRunData?: (runUuids: string[]) => Promise<void>;
+  isLoadingFullRunData?: boolean;
   uiState: ExperimentPageUIState;
   isLoading: boolean;
   isComparingExperiments: boolean;
@@ -58,6 +61,8 @@ export const ExperimentViewRunsControls = React.memo(
     expandRows,
     updateExpandRows,
     refreshRuns,
+    loadFullRunData,
+    isLoadingFullRunData,
     uiState,
     isLoading,
     isComparingExperiments,
@@ -122,6 +127,8 @@ export const ExperimentViewRunsControls = React.memo(
             searchFacetsState={searchFacetsState}
             viewState={viewState}
             refreshRuns={refreshRuns}
+            loadFullRunData={loadFullRunData}
+            isLoadingFullRunData={isLoadingFullRunData}
           />
         )}
 
@@ -160,6 +167,14 @@ export const ExperimentViewRunsControls = React.memo(
                         ? ViewType.DELETED_ONLY
                         : ViewType.ACTIVE_ONLY
                     }
+                  />
+                )}
+
+                {!isComparingRuns && (
+                  <ExperimentViewRunsLoadFullDataButton
+                    runsSelected={viewState.runsSelected}
+                    loadFullRunData={loadFullRunData}
+                    isLoadingFullRunData={isLoadingFullRunData}
                   />
                 )}
 

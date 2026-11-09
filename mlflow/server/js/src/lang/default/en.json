@@ -2343,6 +2343,10 @@
     "defaultMessage": "{timeSince, plural, =1 {1 minute} other {# minutes}} ago",
     "description": "Text for time in minutes since given date for MLflow views"
   },
+  "7kH5Fs": {
+    "defaultMessage": "Load all metrics and parameters of the selected runs",
+    "description": "Tooltip of the button that loads the full metric and param data of selected runs"
+  },
   "7kUi8J": {
     "defaultMessage": "Duration:",
     "description": "Row title for the duration of runs on the experiment compare runs page"
@@ -3090,6 +3094,10 @@
   "AQh8lf": {
     "defaultMessage": "Model",
     "description": "Dimension toggle option for model"
+  },
+  "AUJ7eA": {
+    "defaultMessage": "Load full data",
+    "description": "Label of the button above the experiment runs table that loads all metrics and params of the selected runs"
   },
   "AVeqtn": {
     "defaultMessage": "Enter default artifact root URI",
@@ -11390,6 +11398,10 @@
   "hPDXO7": {
     "defaultMessage": "Add tracing to your application",
     "description": "Step 2 title for traces onboarding"
+  },
+  "hPW29A": {
+    "defaultMessage": "Select runs in the table to load all of their metrics and parameters",
+    "description": "Tooltip of the disabled button that loads the full data of runs when no run is selected"
   },
   "hR27A2": {
     "defaultMessage": "View full dashboard",

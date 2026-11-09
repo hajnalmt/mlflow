@@ -17,6 +17,7 @@ import { shouldUsePredefinedErrorsInExperimentTracking } from '../../../../commo
 import Utils from '../../../../common/utils/Utils';
 import { useExperimentRunsAutoRefresh } from './useExperimentRunsAutoRefresh';
 import type { RunEntity, SearchRunsApiResponse } from '../../../types';
+import { ViewType } from '../../../sdk/MlflowEnums';
 import type { RunsDataProjection } from '../utils/experimentPage.data-projection';
 
 export type FetchRunsHookParams = ReturnType<typeof createSearchRunsParams> & {
@@ -57,6 +58,7 @@ const createFetchRunsRequestParams = (
  * Replaces GetExperimentRunsContext and a substantial portion of <ExperimentRuns> component stack.
  *
  * If `dataProjection` is given, only the metrics and params listed in it are fetched for each run.
+ * Use `loadFullRunData()` to fetch all the metrics and params of selected runs.
  */
 export const useExperimentRuns = (
   uiState: ExperimentPageUIState,
@@ -82,7 +84,11 @@ export const useExperimentRuns = (
   const [isInitialLoadingRuns, setIsInitialLoadingRuns] = useState(true);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<ErrorWrapper | Error | null>(null);
+  const [isLoadingFullRunData, setIsLoadingFullRunData] = useState(false);
   const cachedPinnedRuns = useRef<string[]>([]);
+
+  // UUIDs of runs for which all metrics and params have been explicitly requested
+  const fullDataRunUuids = useRef<Set<string>>(new Set());
 
   const lastFetchedTime = useRef<number | null>(null);
   const lastRequestedParams = useRef<FetchRunsHookParams | null>(null);
@@ -95,6 +101,7 @@ export const useExperimentRuns = (
     }
     setIsInitialLoadingRuns(true);
     setRunsData(createEmptyRunsResult());
+    fullDataRunUuids.current = new Set();
   }, [persistKey, disabled]);
 
   const setResultRunsData = useCallback(
@@ -133,6 +140,44 @@ export const useExperimentRuns = (
     [dispatch, enableWorkspaceModelsRegistryCall],
   );
 
+  // Fetches all metrics and params of the given runs, without the data projection. The runs
+  // are updated in place in the store, so the other runs keep the projected data only.
+  const fetchFullRunData = useCallback(
+    async (runUuids: string[]) => {
+      const requestedFacets = lastSuccessfulRequestedParams.current?.requestedFacets;
+      if (!runUuids.length || !requestedFacets) {
+        return;
+      }
+      await dispatch(
+        loadMoreRunsApi({
+          experimentIds,
+          filter: `run_id IN (${runUuids.map((runUuid) => `'${runUuid}'`).join(',')})`,
+          runViewType: ViewType.ALL,
+          maxResults: runUuids.length,
+        }),
+      );
+      dispatch((_: ThunkDispatch, getStore: () => ReduxState) =>
+        setResultRunsData(getStore(), experimentIds, requestedFacets),
+      );
+    },
+    [dispatch, experimentIds, setResultRunsData],
+  );
+
+  const loadFullRunData = useCallback(
+    async (runUuids: string[]) => {
+      setIsLoadingFullRunData(true);
+      try {
+        await fetchFullRunData(runUuids);
+        runUuids.forEach((runUuid) => fullDataRunUuids.current.add(runUuid));
+      } catch (e) {
+        Utils.logErrorAndNotifyUser(e as ErrorWrapper | Error);
+      } finally {
+        setIsLoadingFullRunData(false);
+      }
+    },
+    [fetchFullRunData],
+  );
+
   // Main function for fetching runs
   const fetchRuns: FetchRunsHookFunction = useCallback(
     (fetchParams, options = {}) =>
@@ -164,6 +209,16 @@ export const useExperimentRuns = (
             // from the same store slice (e.g. run details page). Will be changed when moving to graphQL.
             setResultRunsData(getStore(), fetchParams.experimentIds, fetchParams.requestedFacets);
 
+            // Runs fetched with the data projection replace the full data that has been loaded for them.
+            // Load the full data again for the runs the user asked it for.
+            if (fullDataRunUuids.current.size) {
+              const fetchedRunUuids = (value.runs || []).map((run: RunEntity) => run.info.runUuid);
+              const fullDataRunsToRestore = fetchedRunUuids.filter((runUuid: string) =>
+                fullDataRunUuids.current.has(runUuid),
+              );
+              fetchFullRunData(fullDataRunsToRestore).catch((e) => Utils.logErrorAndNotifyUser(e));
+            }
+
             // In the end, load model versions for the fetched runs
             loadModelVersions(value.runs || []);
             return value;
@@ -189,7 +244,7 @@ export const useExperimentRuns = (
             }
           });
       }),
-    [dispatch, setResultRunsData, loadModelVersions],
+    [dispatch, setResultRunsData, loadModelVersions, fetchFullRunData],
   );
 
   // Fetch runs when new request params are available
@@ -248,6 +303,8 @@ export const useExperimentRuns = (
     isInitialLoadingRuns,
     runsData,
     requestError,
+    loadFullRunData,
+    isLoadingFullRunData,
   };
 };
 
