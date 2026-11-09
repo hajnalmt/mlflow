@@ -2091,6 +2091,10 @@ def _search_runs():
     return response
 
 
+# Maximum number of metric keys and of param keys in the data projection of a search runs request
+MAX_DATA_PROJECTION_KEYS = 1000
+
+
 def search_runs_impl(request_message):
     response_message = SearchRuns.Response()
     run_view_type = ViewType.ACTIVE_ONLY
@@ -2114,9 +2118,18 @@ def search_runs_impl(request_message):
     # Only forward a projection when the request has one: not every store supports projections.
     projection_kwargs = {}
     if request_message.HasField("data_projection"):
-        projection_kwargs["data_projection"] = RunDataProjection.from_proto(
-            request_message.data_projection
-        )
+        data_projection = request_message.data_projection
+        for field_name in ("metric_keys", "param_keys"):
+            if len(getattr(data_projection, field_name)) > MAX_DATA_PROJECTION_KEYS:
+                raise MlflowException(
+                    message=(
+                        f"Invalid value for request parameter data_projection. "
+                        f"{field_name} must contain at most {MAX_DATA_PROJECTION_KEYS} keys, "
+                        f"but got {len(getattr(data_projection, field_name))}."
+                    ),
+                    error_code=INVALID_PARAMETER_VALUE,
+                )
+        projection_kwargs["data_projection"] = RunDataProjection.from_proto(data_projection)
     run_entities = _get_tracking_store().search_runs(
         experiment_ids=experiment_ids,
         filter_string=filter_string,

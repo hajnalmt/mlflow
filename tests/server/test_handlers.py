@@ -937,6 +937,23 @@ def test_get_experiment_run_data_keys_validates_max_results(
     mock_tracking_store.get_run_data_keys.assert_not_called()
 
 
+def test_search_runs_data_projection_key_limit(mock_get_request_message, mock_tracking_store):
+    mock_get_request_message.return_value = SearchRuns(
+        experiment_ids=["0"],
+        data_projection=SearchRuns.DataProjection(
+            metric_keys=[f"m{i}" for i in range(1001)], param_keys=["p"]
+        ),
+    )
+
+    response = _search_runs()
+
+    assert response.status_code == 400
+    assert (
+        "metric_keys must contain at most 1000 keys" in json.loads(response.get_data())["message"]
+    )
+    mock_tracking_store.search_runs.assert_not_called()
+
+
 def test_get_experiment_run_data_keys_unsupported_store(
     mock_get_request_message, mock_tracking_store
 ):
