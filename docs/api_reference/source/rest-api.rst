@@ -8630,6 +8630,24 @@ GetDatasetRecords
 | page_token  | ``STRING`` | Optional pagination token for getting next page           |
 +-------------+------------+-----------------------------------------------------------+
 
+.. _mlflowGetExperimentRunDataKeys:
+
+GetExperimentRunDataKeys
+------------------------
+
+
+
+
+
+
++----------------+------------------------+------------------------------------------------------------------------------------------------------+
+|   Field Name   |          Type          |                                             Description                                              |
++================+========================+======================================================================================================+
+| experiment_ids | An array of ``STRING`` | List of experiment IDs to collect the keys of. Must contain at least one ID.                         |
++----------------+------------------------+------------------------------------------------------------------------------------------------------+
+| run_view_type  | :ref:`mlflowviewtype`  | Whether to collect the keys of only active, only deleted, or all runs. Defaults to only active runs. |
++----------------+------------------------+------------------------------------------------------------------------------------------------------+
+
 .. _mlflowGetLoggedModel:
 
 GetLoggedModel
@@ -10132,6 +10150,24 @@ Response
 +===================+=========================================+===================================================================================+
 | dataset_summaries | An array of :ref:`mlflowdatasetsummary` | Return the summary for most recently created N datasets, as configured in backend |
 +-------------------+-----------------------------------------+-----------------------------------------------------------------------------------+
+
+.. _mlflowGetExperimentRunDataKeysResponse:
+
+Response
+--------
+
+
+
+
+
+
++-------------+------------------------+----------------------------------------------------------------------------+
+| Field Name  |          Type          |                                Description                                 |
++=============+========================+============================================================================+
+| metric_keys | An array of ``STRING`` | Sorted, distinct keys of the (latest) metrics logged on the matching runs. |
++-------------+------------------------+----------------------------------------------------------------------------+
+| param_keys  | An array of ``STRING`` | Sorted, distinct keys of the params logged on the matching runs.           |
++-------------+------------------------+----------------------------------------------------------------------------+
 
 .. _mlflowCreateLoggedModelResponse:
 

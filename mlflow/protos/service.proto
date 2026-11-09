@@ -735,6 +735,25 @@ service MlflowService {
     option (graphql) = {};
   }
 
+  // List the distinct metric and param keys that are logged on the runs of experiments, without
+  // returning any values. Use this to discover the keys that can be requested through
+  // ``SearchRuns.data_projection``.
+  rpc getExperimentRunDataKeys(GetExperimentRunDataKeys) returns (GetExperimentRunDataKeys.Response) {
+    option (rpc) = {
+      endpoints: [
+        {
+          method: "POST"
+          path: "/mlflow/experiments/get-run-data-keys"
+          since: {
+            major: 3
+            minor: 0
+          }
+        }
+      ]
+      visibility: PUBLIC_UNDOCUMENTED
+    };
+  }
+
   // Start a new trace within an experiment.
   rpc startTrace(StartTrace) returns (StartTrace.Response) {
     option (rpc) = {
@@ -4623,6 +4642,25 @@ message SearchDatasets {
   message Response {
     // Return the summary for most recently created N datasets, as configured in backend
     repeated DatasetSummary dataset_summaries = 1;
+  }
+}
+
+message GetExperimentRunDataKeys {
+  option (scalapb.message).extends = "com.databricks.rpc.RPC[$this.Response]";
+
+  // List of experiment IDs to collect the keys of. Must contain at least one ID.
+  repeated string experiment_ids = 1;
+
+  // Whether to collect the keys of only active, only deleted, or all runs.
+  // Defaults to only active runs.
+  optional ViewType run_view_type = 2 [default = ACTIVE_ONLY];
+
+  message Response {
+    // Sorted, distinct keys of the (latest) metrics logged on the matching runs.
+    repeated string metric_keys = 1;
+
+    // Sorted, distinct keys of the params logged on the matching runs.
+    repeated string param_keys = 2;
   }
 }
 

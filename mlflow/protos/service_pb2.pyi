@@ -1385,6 +1385,21 @@ class SearchDatasets(_message.Message):
     experiment_ids: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
+class GetExperimentRunDataKeys(_message.Message):
+    __slots__ = ("experiment_ids", "run_view_type")
+    class Response(_message.Message):
+        __slots__ = ("metric_keys", "param_keys")
+        METRIC_KEYS_FIELD_NUMBER: _ClassVar[int]
+        PARAM_KEYS_FIELD_NUMBER: _ClassVar[int]
+        metric_keys: _containers.RepeatedScalarFieldContainer[str]
+        param_keys: _containers.RepeatedScalarFieldContainer[str]
+        def __init__(self, metric_keys: _Optional[_Iterable[str]] = ..., param_keys: _Optional[_Iterable[str]] = ...) -> None: ...
+    EXPERIMENT_IDS_FIELD_NUMBER: _ClassVar[int]
+    RUN_VIEW_TYPE_FIELD_NUMBER: _ClassVar[int]
+    experiment_ids: _containers.RepeatedScalarFieldContainer[str]
+    run_view_type: ViewType
+    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ...) -> None: ...
+
 class CreateLoggedModel(_message.Message):
     __slots__ = ("experiment_id", "name", "model_type", "source_run_id", "params", "tags")
     class Response(_message.Message):
