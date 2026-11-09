@@ -1386,19 +1386,27 @@ class SearchDatasets(_message.Message):
     def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetExperimentRunDataKeys(_message.Message):
-    __slots__ = ("experiment_ids", "run_view_type")
+    __slots__ = ("experiment_ids", "run_view_type", "search", "max_results")
     class Response(_message.Message):
-        __slots__ = ("metric_keys", "param_keys")
+        __slots__ = ("metric_keys", "param_keys", "metric_keys_truncated", "param_keys_truncated")
         METRIC_KEYS_FIELD_NUMBER: _ClassVar[int]
         PARAM_KEYS_FIELD_NUMBER: _ClassVar[int]
+        METRIC_KEYS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+        PARAM_KEYS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
         metric_keys: _containers.RepeatedScalarFieldContainer[str]
         param_keys: _containers.RepeatedScalarFieldContainer[str]
-        def __init__(self, metric_keys: _Optional[_Iterable[str]] = ..., param_keys: _Optional[_Iterable[str]] = ...) -> None: ...
+        metric_keys_truncated: bool
+        param_keys_truncated: bool
+        def __init__(self, metric_keys: _Optional[_Iterable[str]] = ..., param_keys: _Optional[_Iterable[str]] = ..., metric_keys_truncated: bool = ..., param_keys_truncated: bool = ...) -> None: ...
     EXPERIMENT_IDS_FIELD_NUMBER: _ClassVar[int]
     RUN_VIEW_TYPE_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_FIELD_NUMBER: _ClassVar[int]
+    MAX_RESULTS_FIELD_NUMBER: _ClassVar[int]
     experiment_ids: _containers.RepeatedScalarFieldContainer[str]
     run_view_type: ViewType
-    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ...) -> None: ...
+    search: str
+    max_results: int
+    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ..., search: _Optional[str] = ..., max_results: _Optional[int] = ...) -> None: ...
 
 class CreateLoggedModel(_message.Message):
     __slots__ = ("experiment_id", "name", "model_type", "source_run_id", "params", "tags")

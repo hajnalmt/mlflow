@@ -4655,12 +4655,26 @@ message GetExperimentRunDataKeys {
   // Defaults to only active runs.
   optional ViewType run_view_type = 2 [default = ACTIVE_ONLY];
 
+  // If set, only keys that contain this text (case-insensitive) are returned.
+  optional string search = 3;
+
+  // Maximum number of metric keys and of param keys to return, each. If more keys match, the
+  // first ones in sorted order are returned and the matching ``*_truncated`` field of the
+  // response is set. Defaults to 1000. Servers may support a threshold of at least 10000.
+  optional int32 max_results = 4 [default = 1000];
+
   message Response {
     // Sorted, distinct keys of the (latest) metrics logged on the matching runs.
     repeated string metric_keys = 1;
 
     // Sorted, distinct keys of the params logged on the matching runs.
     repeated string param_keys = 2;
+
+    // Whether more metric keys than ``max_results`` matched, so ``metric_keys`` is incomplete.
+    optional bool metric_keys_truncated = 3;
+
+    // Whether more param keys than ``max_results`` matched, so ``param_keys`` is incomplete.
+    optional bool param_keys_truncated = 4;
   }
 }
 
