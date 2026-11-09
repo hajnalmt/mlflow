@@ -1058,6 +1058,7 @@ class FileStore(AbstractStore):
         max_results,
         order_by,
         page_token,
+        data_projection=None,
     ):
         if max_results > SEARCH_MAX_RESULTS_THRESHOLD:
             raise MlflowException(
@@ -1072,6 +1073,10 @@ class FileStore(AbstractStore):
         filtered = SearchUtils.filter(runs, filter_string)
         sorted_runs = SearchUtils.sort(filtered, order_by)
         runs, next_page_token = SearchUtils.paginate(sorted_runs, page_token, max_results)
+        if data_projection is not None:
+            # Filtering and sorting above need the complete run data, so the projection is only
+            # applied to the page of runs that is returned.
+            runs = [data_projection.apply(run) for run in runs]
         return runs, next_page_token
 
     def log_metric(self, run_id: str, metric: Metric):

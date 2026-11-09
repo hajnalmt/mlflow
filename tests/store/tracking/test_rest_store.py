@@ -42,6 +42,7 @@ from mlflow.entities.assessment import (
 from mlflow.entities.assessment_error import AssessmentError
 from mlflow.entities.assessment_source import AssessmentSource, AssessmentSourceType
 from mlflow.entities.model_registry import PromptVersion
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.span import LiveSpan
 from mlflow.entities.trace import Trace
 from mlflow.entities.trace_data import TraceData
@@ -605,6 +606,43 @@ def test_search_experiments():
                 )
             ),
         )
+
+
+def test_search_runs_data_projection():
+    creds = MlflowHostCreds("https://hello")
+    store = RestStore(lambda: creds)
+
+    with mock_http_request() as mock_http:
+        store.search_runs(
+            ["0"],
+            None,
+            ViewType.ACTIVE_ONLY,
+            max_results=10,
+            data_projection=RunDataProjection(metric_keys=["m1", "m2"], param_keys=[]),
+        )
+        expected_message = SearchRuns(
+            experiment_ids=["0"],
+            run_view_type=ViewType.to_proto(ViewType.ACTIVE_ONLY),
+            max_results=10,
+            data_projection=SearchRuns.DataProjection(metric_keys=["m1", "m2"]),
+        )
+        _verify_requests(mock_http, creds, "runs/search", "POST", message_to_json(expected_message))
+
+    with mock_http_request() as mock_http:
+        store.search_runs(["0"], None, ViewType.ACTIVE_ONLY, max_results=10)
+        sent_body = mock_http.call_args.kwargs["json"]
+        assert "data_projection" not in sent_body
+
+    with mock_http_request() as mock_http:
+        store.search_runs(
+            ["0"],
+            None,
+            ViewType.ACTIVE_ONLY,
+            max_results=10,
+            data_projection=RunDataProjection(),
+        )
+        # An empty projection must still be sent: it means "no metrics and no params".
+        assert mock_http.call_args.kwargs["json"]["data_projection"] == {}
 
 
 def _mock_response_with_200_status_code():

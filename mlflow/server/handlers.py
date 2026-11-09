@@ -71,6 +71,7 @@ from mlflow.entities.logged_model_tag import LoggedModelTag
 from mlflow.entities.model_registry import ModelVersionTag, RegisteredModelTag
 from mlflow.entities.model_registry.prompt_version import IS_PROMPT_TAG_KEY
 from mlflow.entities.multipart_upload import MultipartUploadPart
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.trace_info_v2 import TraceInfoV2
 from mlflow.entities.trace_metrics import MetricAggregation, MetricViewType
@@ -2109,6 +2110,12 @@ def search_runs_impl(request_message):
         pass
 
     order_by = request_message.order_by
+    # Only forward a projection when the request has one: not every store supports projections.
+    projection_kwargs = {}
+    if request_message.HasField("data_projection"):
+        projection_kwargs["data_projection"] = RunDataProjection.from_proto(
+            request_message.data_projection
+        )
     run_entities = _get_tracking_store().search_runs(
         experiment_ids=experiment_ids,
         filter_string=filter_string,
@@ -2116,6 +2123,7 @@ def search_runs_impl(request_message):
         max_results=max_results,
         order_by=order_by,
         page_token=request_message.page_token or None,
+        **projection_kwargs,
     )
     response_message.runs.extend([r.to_proto() for r in run_entities])
     if run_entities.token:

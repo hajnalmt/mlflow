@@ -26,6 +26,7 @@ from mlflow.entities import (
 )
 from mlflow.entities.logged_model_output import LoggedModelOutput
 from mlflow.entities.logged_model_parameter import LoggedModelParameter
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.trace_state import TraceState
 from mlflow.exceptions import MlflowException
@@ -1698,6 +1699,138 @@ def test_search_runs_pagination_with_max_results_none(store: SqlAlchemyStore):
     assert len(result) == 5
     assert [r.info.run_id for r in result] == runs
     assert result.token is None
+
+
+def _log_projection_test_runs(store: SqlAlchemyStore, exp):
+    run_ids = []
+    for i in range(3):
+        run_id = _run_factory(store, _get_run_configs(exp, start_time=10 + i)).info.run_id
+        store.log_batch(
+            run_id,
+            metrics=[
+                Metric(key="m1", value=float(i), timestamp=1, step=0),
+                Metric(key="m2", value=float(i) * 10, timestamp=1, step=0),
+                Metric(key="m3", value=float(i) * 100, timestamp=1, step=0),
+            ],
+            params=[Param("p1", f"a{i}"), Param("p2", f"b{i}")],
+            tags=[RunTag("t1", f"x{i}")],
+        )
+        run_ids.append(run_id)
+    return run_ids
+
+
+def test_search_runs_data_projection(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection")
+    run_ids = _log_projection_test_runs(store, exp)
+
+    runs = store.search_runs(
+        [exp],
+        None,
+        ViewType.ALL,
+        data_projection=RunDataProjection(metric_keys=["m1", "m3"], param_keys=["p2"]),
+    )
+
+    assert [r.info.run_id for r in runs] == run_ids[::-1]
+    for run in runs:
+        i = run_ids.index(run.info.run_id)
+        assert run.data.metrics == {"m1": float(i), "m3": float(i) * 100}
+        assert run.data.params == {"p2": f"b{i}"}
+        assert run.data.tags["t1"] == f"x{i}"
+
+
+def test_search_runs_data_projection_empty_returns_no_metrics_or_params(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection_empty")
+    run_ids = _log_projection_test_runs(store, exp)
+
+    runs = store.search_runs([exp], None, ViewType.ALL, data_projection=RunDataProjection())
+
+    assert len(runs) == len(run_ids)
+    for run in runs:
+        assert run.data.metrics == {}
+        assert run.data.params == {}
+        assert run.data.tags["t1"].startswith("x")
+
+
+def test_search_runs_without_data_projection_returns_all_data(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_without_data_projection")
+    _log_projection_test_runs(store, exp)
+
+    runs = store.search_runs([exp], None, ViewType.ALL)
+
+    for run in runs:
+        assert set(run.data.metrics) == {"m1", "m2", "m3"}
+        assert set(run.data.params) == {"p1", "p2"}
+
+
+def test_search_runs_data_projection_does_not_affect_filter_and_order_by(
+    store: SqlAlchemyStore,
+):
+    exp = _create_experiments(store, "test_search_runs_data_projection_filter_order")
+    run_ids = _log_projection_test_runs(store, exp)
+
+    # Neither the filtered nor the ordered metric/param is part of the projection.
+    runs = store.search_runs(
+        [exp],
+        "metrics.m2 >= 10 and params.p1 != 'a2'",
+        ViewType.ALL,
+        order_by=["metrics.m3 DESC"],
+        data_projection=RunDataProjection(metric_keys=["m1"]),
+    )
+
+    assert [r.info.run_id for r in runs] == [run_ids[1]]
+    assert runs[0].data.metrics == {"m1": 1.0}
+    assert runs[0].data.params == {}
+
+
+def test_search_runs_data_projection_with_pagination(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection_pagination")
+    run_ids = _log_projection_test_runs(store, exp)
+    projection = RunDataProjection(metric_keys=["m2"])
+
+    page1 = store.search_runs([exp], None, ViewType.ALL, max_results=2, data_projection=projection)
+    page2 = store.search_runs(
+        [exp],
+        None,
+        ViewType.ALL,
+        max_results=2,
+        page_token=page1.token,
+        data_projection=projection,
+    )
+
+    assert [r.info.run_id for r in page1] + [r.info.run_id for r in page2] == run_ids[::-1]
+    assert page1.token is not None
+    assert page2.token is None
+    assert all(set(r.data.metrics) == {"m2"} for r in [*page1, *page2])
+
+
+def test_search_runs_data_projection_only_queries_projected_keys(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection_queries")
+    _log_projection_test_runs(store, exp)
+
+    from sqlalchemy import event
+
+    captured = []
+
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        captured.append(statement)
+
+    event.listen(store.engine, "before_cursor_execute", _capture)
+    try:
+        store.search_runs(
+            [exp],
+            None,
+            ViewType.ALL,
+            data_projection=RunDataProjection(metric_keys=["m1"], param_keys=[]),
+        )
+    finally:
+        event.remove(store.engine, "before_cursor_execute", _capture)
+
+    metric_queries = [s for s in captured if "FROM latest_metrics" in s]
+    assert len(metric_queries) == 1
+    # Besides the run ids, the loaded metrics are restricted to the projected key.
+    assert len(re.findall(r"\bIN \(", metric_queries[0])) == 2
+    # No keys requested for params, so the params table is not queried at all.
+    assert not [s for s in captured if "FROM params" in s]
 
 
 def test_search_runs_run_name(store: SqlAlchemyStore):

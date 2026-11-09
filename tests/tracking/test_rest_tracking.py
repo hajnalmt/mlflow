@@ -3146,6 +3146,85 @@ def test_search_runs_graphql(mlflow_client):
     assert json["data"]["mlflowSearchRuns"]["runs"] == expected
 
 
+def _create_run_with_data_for_projection(mlflow_client):
+    experiment_id = mlflow_client.create_experiment("DataProjectionTest")
+    run_id = mlflow_client.create_run(experiment_id).info.run_id
+    mlflow_client.log_batch(
+        run_id,
+        metrics=[Metric("m1", 1.0, 1, 0), Metric("m2", 2.0, 1, 0)],
+        params=[Param("p1", "a"), Param("p2", "b")],
+        tags=[RunTag("t1", "x")],
+    )
+    return experiment_id, run_id
+
+
+def _search_runs_raw(mlflow_client, body):
+    response = requests.post(f"{mlflow_client.tracking_uri}/api/2.0/mlflow/runs/search", json=body)
+    assert response.status_code == 200, response.text
+    return response.json()["runs"]
+
+
+def test_search_runs_data_projection_rest(mlflow_client):
+    experiment_id, _ = _create_run_with_data_for_projection(mlflow_client)
+
+    # Without a projection everything is returned.
+    (run,) = _search_runs_raw(mlflow_client, {"experiment_ids": [experiment_id]})
+    assert {m["key"] for m in run["data"]["metrics"]} == {"m1", "m2"}
+    assert {p["key"] for p in run["data"]["params"]} == {"p1", "p2"}
+
+    (run,) = _search_runs_raw(
+        mlflow_client,
+        {
+            "experiment_ids": [experiment_id],
+            "data_projection": {"metric_keys": ["m2"], "param_keys": ["p1"]},
+        },
+    )
+    assert [m["key"] for m in run["data"]["metrics"]] == ["m2"]
+    assert [p["key"] for p in run["data"]["params"]] == ["p1"]
+    assert [t for t in run["data"]["tags"] if t["key"] == "t1"] == [{"key": "t1", "value": "x"}]
+
+    # An empty projection returns no metrics and no params.
+    (run,) = _search_runs_raw(
+        mlflow_client, {"experiment_ids": [experiment_id], "data_projection": {}}
+    )
+    assert "metrics" not in run["data"]
+    assert "params" not in run["data"]
+
+
+def test_search_runs_data_projection_graphql(mlflow_client):
+    experiment_id, run_id = _create_run_with_data_for_projection(mlflow_client)
+
+    response = requests.post(
+        f"{mlflow_client.tracking_uri}/graphql",
+        json={
+            "query": f"""
+                mutation testMutation {{
+                    mlflowSearchRuns(input: {{
+                        experimentIds: ["{experiment_id}"],
+                        dataProjection: {{ metricKeys: ["m1"], paramKeys: [] }}
+                    }}) {{
+                        runs {{
+                            info {{ runId }}
+                            data {{
+                                metrics {{ key }}
+                                params {{ key }}
+                            }}
+                        }}
+                    }}
+                }}
+            """,
+            "operationName": "testMutation",
+        },
+        headers={"content-type": "application/json; charset=utf-8"},
+    )
+
+    assert response.status_code == 200
+    (run,) = response.json()["data"]["mlflowSearchRuns"]["runs"]
+    assert run["info"]["runId"] == run_id
+    assert run["data"]["metrics"] == [{"key": "m1"}]
+    assert run["data"]["params"] == []
+
+
 def test_list_artifacts_graphql(mlflow_client, tmp_path):
     name = "GraphqlTest"
     experiment_id = mlflow_client.create_experiment(name)

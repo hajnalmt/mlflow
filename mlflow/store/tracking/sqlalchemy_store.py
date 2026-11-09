@@ -69,6 +69,7 @@ from mlflow.entities.logged_model_status import LoggedModelStatus
 from mlflow.entities.logged_model_tag import LoggedModelTag
 from mlflow.entities.metric import Metric, MetricWithRunId
 from mlflow.entities.model_registry import PromptVersion
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.span import LazySpan
 from mlflow.entities.span_status import SpanStatusCode
 from mlflow.entities.trace import Span
@@ -1130,18 +1131,36 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         return [list(dataset_inputs_per_run[run_uuid].values()) for run_uuid in run_uuids]
 
     @staticmethod
-    def _get_eager_run_query_options():
+    def _get_eager_run_query_options(data_projection: RunDataProjection | None = None):
         """
         A list of SQLAlchemy query options that can be used to eagerly load the following
         run attributes when fetching a run: ``latest_metrics``, ``params``, and ``tags``.
+
+        Args:
+            data_projection: If given, only the ``latest_metrics`` and ``params`` whose keys are
+                listed in the projection are loaded. Tags are always loaded in full.
         """
+        # Use a select in load rather than a joined load in order to minimize the memory
+        # overhead of the eager loading procedure. For more information about relationship
+        # loading techniques, see https://docs.sqlalchemy.org/en/13/orm/
+        # loading_relationships.html#relationship-loading-techniques
+        if data_projection is None:
+            return [
+                sqlalchemy.orm.selectinload(SqlRun.latest_metrics),
+                sqlalchemy.orm.selectinload(SqlRun.params),
+                sqlalchemy.orm.selectinload(SqlRun.tags),
+            ]
+
+        def _load_keys(relationship, model, keys):
+            # ``noload`` leaves the relationship empty without emitting a query, which is what
+            # is wanted when no keys are requested.
+            if not keys:
+                return sqlalchemy.orm.noload(relationship)
+            return sqlalchemy.orm.selectinload(relationship.and_(model.key.in_(keys)))
+
         return [
-            # Use a select in load rather than a joined load in order to minimize the memory
-            # overhead of the eager loading procedure. For more information about relationship
-            # loading techniques, see https://docs.sqlalchemy.org/en/13/orm/
-            # loading_relationships.html#relationship-loading-techniques
-            sqlalchemy.orm.selectinload(SqlRun.latest_metrics),
-            sqlalchemy.orm.selectinload(SqlRun.params),
+            _load_keys(SqlRun.latest_metrics, SqlLatestMetric, data_projection.metric_keys),
+            _load_keys(SqlRun.params, SqlParam, data_projection.param_keys),
             sqlalchemy.orm.selectinload(SqlRun.tags),
         ]
 
@@ -2210,6 +2229,7 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         max_results,
         order_by,
         page_token,
+        data_projection=None,
     ):
         def compute_next_token(current_size):
             next_token = None
@@ -2256,7 +2276,7 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
             stmt = (
                 stmt
                 .distinct()
-                .options(*self._get_eager_run_query_options())
+                .options(*self._get_eager_run_query_options(data_projection))
                 .filter(
                     SqlRun.experiment_id.in_(experiment_ids),
                     SqlRun.lifecycle_stage.in_(stages),

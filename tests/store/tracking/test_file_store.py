@@ -41,6 +41,7 @@ from mlflow.entities import (
     _DatasetSummary,
 )
 from mlflow.entities.assessment import ExpectationValue, FeedbackValue
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_status import TraceStatus
 from mlflow.exceptions import MissingConfigException, MlflowException
 from mlflow.models import Model
@@ -1418,6 +1419,41 @@ def test_search_runs_pagination(store):
     result = store.search_runs([exp], None, ViewType.ALL, max_results=4, page_token=result.token)
     assert [r.info.run_id for r in result] == runs[8:]
     assert result.token is None
+
+
+def test_search_runs_data_projection(store):
+    exp = store.create_experiment("test_search_runs_data_projection")
+    run_id = store.create_run(exp, "user", 1000, [], "name").info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[
+            Metric(key="m1", value=1.0, timestamp=1, step=0),
+            Metric(key="m2", value=2.0, timestamp=1, step=0),
+        ],
+        params=[Param("p1", "a"), Param("p2", "b")],
+        tags=[RunTag("t1", "x")],
+    )
+
+    # Filtering and sorting still work on metrics/params that are not part of the projection.
+    runs = store.search_runs(
+        [exp],
+        "metrics.m2 > 1 and params.p2 = 'b'",
+        ViewType.ALL,
+        order_by=["metrics.m2 DESC"],
+        data_projection=RunDataProjection(metric_keys=["m1"], param_keys=["p1"]),
+    )
+    assert [r.info.run_id for r in runs] == [run_id]
+    assert runs[0].data.metrics == {"m1": 1.0}
+    assert runs[0].data.params == {"p1": "a"}
+    assert runs[0].data.tags["t1"] == "x"
+
+    runs = store.search_runs([exp], None, ViewType.ALL, data_projection=RunDataProjection())
+    assert runs[0].data.metrics == {}
+    assert runs[0].data.params == {}
+
+    runs = store.search_runs([exp], None, ViewType.ALL)
+    assert set(runs[0].data.metrics) == {"m1", "m2"}
+    assert set(runs[0].data.params) == {"p1", "p2"}
 
 
 def test_search_runs_run_name(store):

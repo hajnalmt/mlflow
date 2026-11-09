@@ -46,6 +46,7 @@ from mlflow.entities.model_registry import (
 from mlflow.entities.model_registry.prompt_version import IS_PROMPT_TAG_KEY, PROMPT_TEXT_TAG_KEY
 from mlflow.entities.presigned_download import PresignedDownloadUrlResponse
 from mlflow.entities.presigned_upload import CreatePresignedUploadResponse
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_location import TraceLocation as EntityTraceLocation
 from mlflow.entities.trace_metrics import (
     AggregationType,
@@ -799,6 +800,49 @@ def test_search_runs_empty_page_token(mock_get_request_message, mock_tracking_st
     mock_tracking_store.search_runs.assert_called_once()
     call_kwargs = mock_tracking_store.search_runs.call_args.kwargs
     assert call_kwargs["page_token"] is None  # page_token should be None, not ""
+
+
+def test_search_runs_data_projection(mock_get_request_message, mock_tracking_store):
+    search_runs_proto = SearchRuns(
+        experiment_ids=["0"],
+        data_projection=SearchRuns.DataProjection(metric_keys=["m1"], param_keys=["p1", "p2"]),
+    )
+    mock_get_request_message.return_value = search_runs_proto
+    mock_tracking_store.search_runs.return_value = PagedList([], None)
+
+    _search_runs()
+
+    kwargs = mock_tracking_store.search_runs.call_args.kwargs
+    assert kwargs["data_projection"] == RunDataProjection(
+        metric_keys=["m1"], param_keys=["p1", "p2"]
+    )
+
+
+def test_search_runs_empty_data_projection_is_forwarded(
+    mock_get_request_message, mock_tracking_store
+):
+    search_runs_proto = SearchRuns(experiment_ids=["0"])
+    search_runs_proto.data_projection.SetInParent()
+    mock_get_request_message.return_value = search_runs_proto
+    mock_tracking_store.search_runs.return_value = PagedList([], None)
+
+    _search_runs()
+
+    # An empty projection means "no metrics and no params", which differs from no projection.
+    kwargs = mock_tracking_store.search_runs.call_args.kwargs
+    assert kwargs["data_projection"] == RunDataProjection()
+
+
+def test_search_runs_without_data_projection_does_not_pass_it_to_store(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = SearchRuns(experiment_ids=["0"])
+    mock_tracking_store.search_runs.return_value = PagedList([], None)
+
+    _search_runs()
+
+    # Stores without projection support must not receive the argument.
+    assert "data_projection" not in mock_tracking_store.search_runs.call_args.kwargs
 
 
 def test_log_batch_api_req(mock_get_request_json):
