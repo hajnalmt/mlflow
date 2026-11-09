@@ -202,8 +202,8 @@ export const createExperimentPageUIState = (): ExperimentPageUIState => ({
   hideEmptyCharts: true,
   groupBy: null,
   groupsExpanded: {},
-  // Auto-refresh is enabled by default
-  autoRefreshEnabled: true,
+  // Auto-refresh is disabled by default
+  autoRefreshEnabled: false,
   globalLineChartConfig: {
     xAxisKey: RunsChartsLineChartXAxisType.STEP,
     lineSmoothness: 0,
