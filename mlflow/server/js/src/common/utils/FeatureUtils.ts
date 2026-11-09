@@ -217,7 +217,7 @@ export const shouldEnableExperimentOverviewTab = (hasV4Location?: boolean) => {
  * This enables the workflow type selector and nested navigation items in the main sidebar.
  */
 export const shouldEnableWorkflowBasedNavigation = () => {
-  return true;
+  return false;
 };
 
 /**
