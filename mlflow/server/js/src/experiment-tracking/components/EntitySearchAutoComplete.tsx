@@ -41,6 +41,11 @@ export type EntitySearchAutoCompleteCompleteProps = {
   useQuickFilter?: boolean;
   defaultActiveFirstOption?: boolean;
   className?: string;
+  /**
+   * Called with the name of the entity (e.g. "metrics.rm") that the user is typing, or with an empty
+   * string when no entity is being edited. Lets callers look up more suggestions for the typed name.
+   */
+  onEditedEntityNameChange?: (entityName: string) => void;
 };
 
 /**
@@ -57,6 +62,7 @@ export const EntitySearchAutoComplete = ({
   useQuickFilter,
   defaultActiveFirstOption = true,
   className,
+  onEditedEntityNameChange,
 }: EntitySearchAutoCompleteCompleteProps) => {
   const { theme, getPrefixedClassName } = useDesignSystemTheme();
 
@@ -115,6 +121,11 @@ export const EntitySearchAutoComplete = ({
     // omit from hook dependencies as per react docs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
+
+  const editedEntityName = autocompleteEnabled ? (entityBeingEdited?.name.trim() ?? '') : '';
+  useEffect(() => {
+    onEditedEntityNameChange?.(editedEntityName);
+  }, [editedEntityName, onEditedEntityNameChange]);
 
   const filteredOptions = useMemo(() => {
     if (!entityBeingEdited) {
