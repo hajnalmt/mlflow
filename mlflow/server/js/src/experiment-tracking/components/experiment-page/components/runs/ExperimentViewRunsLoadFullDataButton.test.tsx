@@ -16,19 +16,19 @@ const renderButton = (props: React.ComponentProps<typeof ExperimentViewRunsLoadF
 
 describe('ExperimentViewRunsLoadFullDataButton', () => {
   it('is disabled when no run is selected', () => {
-    renderButton({ runsSelected: {}, loadFullRunData: jest.fn(async () => {}) });
+    renderButton({ runsSelected: {}, loadFullRunData: jest.fn(async (_runUuids: string[]) => {}) });
 
     expect(screen.getByTestId('runs-load-full-data-button')).toBeDisabled();
   });
 
   it('is disabled when all runs have been deselected', () => {
-    renderButton({ runsSelected: { run1: false }, loadFullRunData: jest.fn(async () => {}) });
+    renderButton({ runsSelected: { run1: false }, loadFullRunData: jest.fn(async (_runUuids: string[]) => {}) });
 
     expect(screen.getByTestId('runs-load-full-data-button')).toBeDisabled();
   });
 
   it('loads the full data of the selected runs only', async () => {
-    const loadFullRunData = jest.fn(async () => {});
+    const loadFullRunData = jest.fn(async (_runUuids: string[]) => {});
     renderButton({ runsSelected: { run1: true, run2: false, run3: true }, loadFullRunData });
 
     const button = screen.getByTestId('runs-load-full-data-button');
@@ -40,7 +40,7 @@ describe('ExperimentViewRunsLoadFullDataButton', () => {
   });
 
   it('explains why it is disabled in its tooltip', async () => {
-    renderButton({ runsSelected: {}, loadFullRunData: jest.fn(async () => {}) });
+    renderButton({ runsSelected: {}, loadFullRunData: jest.fn(async (_runUuids: string[]) => {}) });
 
     await userEvent.hover(screen.getByTestId('runs-load-full-data-button'));
 
