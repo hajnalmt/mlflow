@@ -5903,6 +5903,10 @@
     "defaultMessage": "Could not save your review: {error}",
     "description": "Review focused view: error toast when saving a review fails"
   },
+  "MM4n4N": {
+    "defaultMessage": "Show {count} more ({remaining} remaining)",
+    "description": "Run page > Overview > Metrics and parameters tables > Button that reveals more rows when the table is truncated"
+  },
   "MNCAQh": {
     "defaultMessage": "Calls",
     "description": "Column header for call count"
