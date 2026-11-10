@@ -9511,6 +9511,10 @@
     "defaultMessage": "(empty)",
     "description": "Experiment page > artifact compare view > results table > no result (empty cell)"
   },
+  "aQzdwd": {
+    "defaultMessage": "Charts are generated automatically for {limit} of {total} metrics. To chart another metric, use the search above to check whether it is already charted, or choose Add chart in a section and select the metric.",
+    "description": "Experiment tracking > runs charts > notice shown when there are more metrics than the automatically generated charts"
+  },
   "aS7m1u": {
     "defaultMessage": "Learn more",
     "description": "Link text to learn more about evaluation datasets"
