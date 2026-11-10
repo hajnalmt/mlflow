@@ -1,6 +1,7 @@
 import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 import { keyBy } from 'lodash';
 import { renderWithIntl, fastFillInput, act, screen, within } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
+import userEvent from '@testing-library/user-event';
 import type { LoggedModelProto, MetricEntitiesByName, RunInfoEntity } from '../../../types';
 import { RunViewMetricsTable } from './RunViewMetricsTable';
 import { MemoryRouter } from '../../../../common/utils/RoutingUtils';
@@ -121,5 +122,97 @@ describe('RunViewMetricsTable', () => {
       'href',
       expect.stringMatching(/models\/m-c1/),
     );
+  });
+
+  describe('with more metrics than the page size', () => {
+    const getRenderedRows = () => document.querySelectorAll('[role="row"]');
+
+    const buildMetrics = (count: number, keyPrefix = 'metric_'): MetricEntitiesByName =>
+      keyBy(
+        Array.from({ length: count }, (_, index) => ({
+          key: `${keyPrefix}${index.toString().padStart(3, '0')}`,
+          value: index.toString(),
+        })),
+        'key',
+      ) as any;
+
+    test('renders a page of rows and reveals the rest on demand', async () => {
+      renderComponent(buildMetrics(250));
+
+      // The title counts all metrics, but only the first page of rows is rendered
+      expect(screen.getByRole('heading', { name: 'Metrics (250)' })).toBeInTheDocument();
+      expect(getRenderedRows()).toHaveLength(100 + 1);
+      expect(screen.getByText('metric_099')).toBeInTheDocument();
+      expect(screen.queryByText('metric_100')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show 100 more (150 remaining)' }));
+      expect(getRenderedRows()).toHaveLength(200 + 1);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show 50 more (50 remaining)' }));
+      expect(getRenderedRows()).toHaveLength(250 + 1);
+      expect(screen.getByText('metric_249')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Show .* more/ })).not.toBeInTheDocument();
+    });
+
+    test('does not show the button when all metrics fit in a page', () => {
+      renderComponent(buildMetrics(100));
+
+      expect(getRenderedRows()).toHaveLength(100 + 1);
+      expect(screen.queryByRole('button', { name: /Show .* more/ })).not.toBeInTheDocument();
+    });
+
+    test('filters all metrics, not only the rendered ones, and starts over from the first page', async () => {
+      renderComponent(buildMetrics(250));
+      await userEvent.click(screen.getByRole('button', { name: 'Show 100 more (150 remaining)' }));
+      expect(getRenderedRows()).toHaveLength(200 + 1);
+
+      // This metric is beyond the rendered rows
+      await fastFillInput(screen.getByRole('textbox'), 'metric_24');
+      expect(screen.getByRole('heading', { name: 'Metrics (10)' })).toBeInTheDocument();
+      expect(getRenderedRows()).toHaveLength(10 + 1);
+      expect(screen.getByText('metric_249')).toBeInTheDocument();
+
+      // Clearing the filter shows the first page again, not the previously revealed rows
+      await userEvent.clear(screen.getByRole('textbox'));
+      expect(getRenderedRows()).toHaveLength(100 + 1);
+    });
+
+    test('keeps the section headers with the number of all metrics of the section', async () => {
+      renderComponent({
+        ...buildMetrics(150, 'system/metric_'),
+        ...buildMetrics(150, 'model_metric_'),
+      });
+
+      // System metrics come first and take the whole page, model metrics are still announced
+      expect(screen.getByRole('cell', { name: 'System metrics (150)' })).toBeInTheDocument();
+      expect(screen.getByRole('cell', { name: 'Model metrics (150)' })).toBeInTheDocument();
+      expect(getRenderedRows()).toHaveLength(100 + 2 + 1);
+      expect(screen.queryByText('model_metric_000')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show 100 more (200 remaining)' }));
+      expect(screen.getByText('model_metric_049')).toBeInTheDocument();
+      expect(getRenderedRows()).toHaveLength(200 + 2 + 1);
+    });
+
+    test('shows the models column when only metrics beyond the rendered rows have models', async () => {
+      const latestMetrics = buildMetrics(250);
+      renderComponent(latestMetrics, [
+        { data: { metrics: [latestMetrics['metric_249']] }, info: { name: 'model_249', model_id: 'm-249' } },
+      ]);
+
+      // The column header must not depend on which rows are currently rendered
+      expect(screen.getByRole('columnheader', { name: 'Models' })).toBeInTheDocument();
+      expect(
+        within(screen.getByText('metric_000').closest<HTMLElement>('[role="row"]') as HTMLElement).getAllByRole('cell'),
+      ).toHaveLength(3);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show 100 more (150 remaining)' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Show 50 more (50 remaining)' }));
+      expect(
+        within(screen.getByText('metric_249').closest<HTMLElement>('[role="row"]') as HTMLElement).getByRole('link', {
+          name: 'model_249',
+        }),
+      ).toBeInTheDocument();
+    });
   });
 });

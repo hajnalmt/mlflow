@@ -9,6 +9,7 @@ import type { ErrorWrapper } from '../../../../../common/utils/ErrorWrapper';
 import { ToggleButton, useDesignSystemTheme } from '@databricks/design-system';
 import { FormattedMessage } from 'react-intl';
 import { ExperimentViewRunsColumnSelector } from './ExperimentViewRunsColumnSelector';
+import { ExperimentViewRunsLoadFullDataButton } from './ExperimentViewRunsLoadFullDataButton';
 import { useExperimentPageViewMode } from '../../hooks/useExperimentPageViewMode';
 import Utils from '../../../../../common/utils/Utils';
 import { downloadRunsCsv } from '../../utils/experimentPage.common-utils';
@@ -17,6 +18,8 @@ import { ExperimentViewRunsGroupBySelector } from './ExperimentViewRunsGroupBySe
 import { useUpdateExperimentViewUIState } from '../../contexts/ExperimentPageUIStateContext';
 import type { ExperimentPageSearchFacetsState } from '../../models/ExperimentPageSearchFacetsState';
 import { ExperimentViewRunsSortSelectorV2 } from './ExperimentViewRunsSortSelectorV2';
+import { LIFECYCLE_FILTER } from '../../../../types';
+import { ViewType } from '../../../../sdk/MlflowEnums';
 
 type ExperimentViewRunsControlsProps = {
   viewState: ExperimentPageViewState;
@@ -34,6 +37,8 @@ type ExperimentViewRunsControlsProps = {
   requestError: ErrorWrapper | Error | null;
 
   refreshRuns: () => void;
+  loadFullRunData?: (runUuids: string[]) => Promise<void>;
+  isLoadingFullRunData?: boolean;
   uiState: ExperimentPageUIState;
   isLoading: boolean;
   isComparingExperiments: boolean;
@@ -56,6 +61,8 @@ export const ExperimentViewRunsControls = React.memo(
     expandRows,
     updateExpandRows,
     refreshRuns,
+    loadFullRunData,
+    isLoadingFullRunData,
     uiState,
     isLoading,
     isComparingExperiments,
@@ -120,6 +127,8 @@ export const ExperimentViewRunsControls = React.memo(
             searchFacetsState={searchFacetsState}
             viewState={viewState}
             refreshRuns={refreshRuns}
+            loadFullRunData={loadFullRunData}
+            isLoadingFullRunData={isLoadingFullRunData}
           />
         )}
 
@@ -153,6 +162,19 @@ export const ExperimentViewRunsControls = React.memo(
                     runsData={runsData}
                     selectedColumns={uiState.selectedColumns}
                     onResetColumns={onResetColumns}
+                    runViewType={
+                      searchFacetsState.lifecycleFilter === LIFECYCLE_FILTER.DELETED
+                        ? ViewType.DELETED_ONLY
+                        : ViewType.ACTIVE_ONLY
+                    }
+                  />
+                )}
+
+                {!isComparingRuns && (
+                  <ExperimentViewRunsLoadFullDataButton
+                    runsSelected={viewState.runsSelected}
+                    loadFullRunData={loadFullRunData}
+                    isLoadingFullRunData={isLoadingFullRunData}
                   />
                 )}
 

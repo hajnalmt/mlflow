@@ -2,6 +2,9 @@ import { jest, describe, test, expect, beforeEach } from '@jest/globals';
 import React, { useState } from 'react';
 import { DesignSystemProvider, Input } from '@databricks/design-system';
 import { mountWithIntl } from '@mlflow/mlflow/src/common/utils/TestUtils.enzyme';
+import { QueryClient, QueryClientProvider } from '@databricks/web-shared/query-client';
+import { MemoryRouter } from '../../../../../common/utils/RoutingUtils';
+import { MlflowService } from '../../../../sdk/MlflowService';
 import { EXPERIMENT_RUNS_MOCK_STORE } from '../../fixtures/experiment-runs.fixtures';
 import { experimentRunsSelector } from '../../utils/experimentRuns.selector';
 import { RunsSearchAutoComplete } from './RunsSearchAutoComplete';
@@ -17,7 +20,12 @@ const MOCK_RUNS_DATA = experimentRunsSelector(EXPERIMENT_RUNS_MOCK_STORE, {
 
 const onClearMock = jest.fn();
 
+beforeEach(() => {
+  jest.spyOn(MlflowService, 'getExperimentRunDataKeys').mockResolvedValue({});
+});
+
 const doStatefulMock = (additionalProps?: any) => {
+  const queryClient = new QueryClient();
   const mockUpdateSearchFacets = jest.fn();
   let currentState: any;
 
@@ -46,9 +54,13 @@ const doStatefulMock = (additionalProps?: any) => {
       onClear: onClearMock,
     } as any;
     return (
-      <DesignSystemProvider>
-        <RunsSearchAutoComplete {...{ ...props, ...additionalProps }} />
-      </DesignSystemProvider>
+      <MemoryRouter initialEntries={['/experiments/123']}>
+        <QueryClientProvider client={queryClient}>
+          <DesignSystemProvider>
+            <RunsSearchAutoComplete {...{ ...props, ...additionalProps }} />
+          </DesignSystemProvider>
+        </QueryClientProvider>
+      </MemoryRouter>
     );
   };
   return {

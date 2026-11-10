@@ -1,6 +1,7 @@
 import { jest, describe, test, expect } from '@jest/globals';
 import { EXPERIMENT_LOG_MODEL_HISTORY_TAG } from './experimentPage.common-utils';
-import { fetchModelVersionsForRuns } from './experimentPage.fetch-utils';
+import { createSearchRunsParams, fetchModelVersionsForRuns } from './experimentPage.fetch-utils';
+import { createExperimentPageSearchFacetsState } from '../models/ExperimentPageSearchFacetsState';
 
 jest.mock('../../../../model-registry/constants', () => ({
   MAX_RUNS_IN_SEARCH_MODEL_VERSIONS_FILTER: 5,
@@ -31,6 +32,22 @@ describe('experiment page fetch utils', () => {
       expect(actionCreatorMock.mock.calls[1][0]).toEqual({
         run_id: ['run_11', 'run_13', 'run_15', 'run_17', 'run_19'],
       });
+    });
+  });
+
+  describe('createSearchRunsParams', () => {
+    const searchFacets = { ...createExperimentPageSearchFacetsState(), runsPinned: [] };
+
+    test('it requests all metrics and params by default', () => {
+      expect(createSearchRunsParams(['1'], searchFacets, 0).dataProjection).toBeUndefined();
+    });
+
+    test('it passes the data projection', () => {
+      const dataProjection = { metric_keys: ['m1'], param_keys: [] };
+
+      const params = createSearchRunsParams(['1'], searchFacets, 0, 'token', 50, dataProjection);
+
+      expect(params).toEqual(expect.objectContaining({ pageToken: 'token', maxResults: 50, dataProjection }));
     });
   });
 });

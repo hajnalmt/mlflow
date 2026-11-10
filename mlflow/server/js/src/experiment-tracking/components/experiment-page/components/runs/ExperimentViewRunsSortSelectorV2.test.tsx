@@ -1,10 +1,12 @@
-import { jest, describe, beforeEach, test, expect } from '@jest/globals';
+import { jest, describe, beforeEach, afterEach, test, expect } from '@jest/globals';
 import userEvent from '@testing-library/user-event';
-import { render, screen } from '../../../../../common/utils/TestUtils.react18';
+import { render, screen, waitFor } from '../../../../../common/utils/TestUtils.react18';
 import { ExperimentViewRunsSortSelectorV2 } from './ExperimentViewRunsSortSelectorV2';
 import { DesignSystemProvider } from '@databricks/design-system';
-import { MemoryRouter, useSearchParams } from '../../../../../common/utils/RoutingUtils';
+import { MemoryRouter, Route, Routes, useSearchParams } from '../../../../../common/utils/RoutingUtils';
 import { IntlProvider } from 'react-intl';
+import { QueryClient, QueryClientProvider } from '@databricks/web-shared/query-client';
+import { MlflowService } from '../../../../sdk/MlflowService';
 
 // eslint-disable-next-line no-restricted-syntax -- TODO(FEINF-4392)
 jest.setTimeout(30000);
@@ -30,7 +32,9 @@ describe('ExperimentViewRunsSortSelectorV2', () => {
 
   const getCurrentSearchParams = () => Object.fromEntries(mockLatestParams.entries());
 
-  const renderComponent = () => {
+  let queryClient: QueryClient;
+
+  const renderComponent = (experimentId = '123') => {
     const Component = () => {
       const [latestParams] = useSearchParams();
       mockLatestParams = latestParams;
@@ -46,10 +50,19 @@ describe('ExperimentViewRunsSortSelectorV2', () => {
     };
     render(<Component />, {
       wrapper: ({ children }) => (
-        <MemoryRouter>
-          <IntlProvider locale="en">
-            <DesignSystemProvider>{children}</DesignSystemProvider>
-          </IntlProvider>
+        <MemoryRouter initialEntries={[`/experiments/${experimentId}`]}>
+          <Routes>
+            <Route
+              path="/experiments/:experimentId"
+              element={
+                <IntlProvider locale="en">
+                  <DesignSystemProvider>
+                    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+                  </DesignSystemProvider>
+                </IntlProvider>
+              }
+            />
+          </Routes>
         </MemoryRouter>
       ),
     });
@@ -57,6 +70,12 @@ describe('ExperimentViewRunsSortSelectorV2', () => {
 
   beforeEach(() => {
     mockLatestParams = new URLSearchParams();
+    queryClient = new QueryClient();
+    jest.spyOn(MlflowService, 'getExperimentRunDataKeys').mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   test('should change sort options', async () => {
@@ -110,5 +129,29 @@ describe('ExperimentViewRunsSortSelectorV2', () => {
     await userEvent.click(screen.getByRole('button', { name: /Sort/ }));
     await userEvent.type(screen.getByPlaceholderText('Search'), 'abc-xyz-foo-bar');
     expect(screen.getByText('No results')).toBeInTheDocument();
+  });
+
+  test('should offer the metrics and params found by the server for the search query', async () => {
+    jest.mocked(MlflowService.getExperimentRunDataKeys).mockResolvedValue({
+      metric_keys: ['eval/ds1/f1', 'metric_beta'],
+      param_keys: ['eval_lr'],
+    });
+    renderComponent();
+
+    await userEvent.click(screen.getByRole('button', { name: /Sort/ }));
+    await userEvent.type(screen.getByPlaceholderText('Search'), 'eval');
+
+    await waitFor(() =>
+      expect(MlflowService.getExperimentRunDataKeys).toHaveBeenLastCalledWith(
+        expect.objectContaining({ experiment_ids: ['123'], search: 'eval', max_results: 100 }),
+      ),
+    );
+    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'eval/ds1/f1' }));
+
+    expect(getCurrentSearchParams()).toEqual(expect.objectContaining({ orderByKey: 'metrics.`eval/ds1/f1`' }));
+    // Keys that were loaded already are not offered twice
+    await userEvent.click(screen.getByRole('button', { name: /Sort/ }));
+    await userEvent.type(screen.getByPlaceholderText('Search'), 'beta');
+    expect(screen.getAllByRole('menuitemcheckbox', { name: 'metric_beta' })).toHaveLength(1);
   });
 });

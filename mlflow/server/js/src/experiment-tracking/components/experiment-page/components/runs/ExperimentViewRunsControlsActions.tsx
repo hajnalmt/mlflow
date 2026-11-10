@@ -13,6 +13,7 @@ import type { ExperimentPageSearchFacetsState } from '../../models/ExperimentPag
 import type { RunInfoEntity } from '../../../../types';
 import { useDesignSystemTheme } from '@databricks/design-system';
 import { ExperimentViewRunsControlsActionsSelectTags } from './ExperimentViewRunsControlsActionsSelectTags';
+import { ExperimentViewRunsLoadFullDataButton } from './ExperimentViewRunsLoadFullDataButton';
 import { useRegisterSelectedIds } from '@mlflow/mlflow/src/assistant';
 
 export type ExperimentViewRunsControlsActionsProps = {
@@ -20,13 +21,22 @@ export type ExperimentViewRunsControlsActionsProps = {
   searchFacetsState: ExperimentPageSearchFacetsState;
   runsData: ExperimentRunsSelectorResult;
   refreshRuns: () => void;
+  loadFullRunData?: (runUuids: string[]) => Promise<void>;
+  isLoadingFullRunData?: boolean;
 };
 
 const CompareRunsButtonWrapper: React.FC<React.PropsWithChildren<unknown>> = ({ children }) => <>{children}</>;
 
 export const ExperimentViewRunsControlsActions = React.memo(
   // eslint-disable-next-line react-component-name/react-component-name -- TODO(FEINF-4716)
-  ({ viewState, runsData, searchFacetsState, refreshRuns }: ExperimentViewRunsControlsActionsProps) => {
+  ({
+    viewState,
+    runsData,
+    searchFacetsState,
+    refreshRuns,
+    loadFullRunData,
+    isLoadingFullRunData,
+  }: ExperimentViewRunsControlsActionsProps) => {
     const { runsSelected } = viewState;
     const { runInfos, tagsList } = runsData;
     const { lifecycleFilter } = searchFacetsState;
@@ -127,6 +137,13 @@ export const ExperimentViewRunsControlsActions = React.memo(
               />
             </Button>
           </CompareRunsButtonWrapper>
+
+          <div css={styles.buttonSeparator} />
+          <ExperimentViewRunsLoadFullDataButton
+            runsSelected={runsSelected}
+            loadFullRunData={loadFullRunData}
+            isLoadingFullRunData={isLoadingFullRunData}
+          />
 
           <div css={styles.buttonSeparator} />
           <ExperimentViewRunsControlsActionsSelectTags

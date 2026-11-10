@@ -41,6 +41,7 @@ from mlflow.entities.gateway_budget_policy import (
     BudgetUnit,
 )
 from mlflow.entities.lifecycle_stage import LifecycleStage
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_location import TraceLocation
 from mlflow.entities.trace_state import TraceState
 from mlflow.entities.workspace import TraceArchivalConfig
@@ -231,6 +232,111 @@ def test_runs_are_workspace_scoped(workspace_tracking_store):
     with WorkspaceContext("team-a"):
         fetched = workspace_tracking_store.get_run(run_a.info.run_id)
         assert fetched.info.experiment_id == exp_a_id
+
+
+def _log_run_data(store: SqlAlchemyStore, workspace: str, run_id: str, prefix: str):
+    with WorkspaceContext(workspace):
+        store.log_batch(
+            run_id,
+            metrics=[
+                Metric(f"{prefix}_loss", 1.0, _now_ms(), 0),
+                Metric("shared_acc", 0.5, _now_ms(), 0),
+            ],
+            params=[Param(f"{prefix}_lr", "0.1"), Param("shared_seed", "7")],
+            tags=[],
+        )
+
+
+def test_get_run_data_keys_is_workspace_scoped(workspace_tracking_store):
+    exp_a_id, run_a = _create_run(workspace_tracking_store, "team-a", "keys-exp-a", "run-a")
+    exp_b_id, run_b = _create_run(workspace_tracking_store, "team-b", "keys-exp-b", "run-b")
+    _log_run_data(workspace_tracking_store, "team-a", run_a.info.run_id, "a")
+    _log_run_data(workspace_tracking_store, "team-b", run_b.info.run_id, "b")
+
+    with WorkspaceContext("team-a"):
+        keys = workspace_tracking_store.get_run_data_keys([exp_a_id, exp_b_id])
+        assert keys.metric_keys == ("a_loss", "shared_acc")
+        assert keys.param_keys == ("a_lr", "shared_seed")
+
+        # Experiments of another workspace are not visible, even when requested explicitly
+        keys = workspace_tracking_store.get_run_data_keys([exp_b_id])
+        assert keys.metric_keys == ()
+        assert keys.param_keys == ()
+
+    with WorkspaceContext("team-b"):
+        keys = workspace_tracking_store.get_run_data_keys([exp_a_id, exp_b_id])
+        assert keys.metric_keys == ("b_loss", "shared_acc")
+        assert keys.param_keys == ("b_lr", "shared_seed")
+
+        # The search only looks at the keys of the active workspace
+        keys = workspace_tracking_store.get_run_data_keys([exp_a_id, exp_b_id], search="a_")
+        assert keys.metric_keys == ()
+        assert keys.param_keys == ()
+        keys = workspace_tracking_store.get_run_data_keys([exp_a_id, exp_b_id], search="loss")
+        assert keys.metric_keys == ("b_loss",)
+
+
+def test_get_run_data_keys_truncation_is_workspace_scoped(workspace_tracking_store):
+    exp_a_id, run_a = _create_run(workspace_tracking_store, "team-a", "keys-trunc-a", "run-a")
+    exp_b_id, run_b = _create_run(workspace_tracking_store, "team-b", "keys-trunc-b", "run-b")
+    _log_run_data(workspace_tracking_store, "team-a", run_a.info.run_id, "a")
+    _log_run_data(workspace_tracking_store, "team-b", run_b.info.run_id, "b")
+
+    with WorkspaceContext("team-b"):
+        # Team A's keys sort first and must not use up the limit or mark the result as truncated
+        keys = workspace_tracking_store.get_run_data_keys([exp_a_id, exp_b_id], max_results=2)
+        assert keys.metric_keys == ("b_loss", "shared_acc")
+        assert not keys.metric_keys_truncated
+        assert keys.param_keys == ("b_lr", "shared_seed")
+        assert not keys.param_keys_truncated
+
+        keys = workspace_tracking_store.get_run_data_keys([exp_a_id, exp_b_id], max_results=1)
+        assert keys.metric_keys == ("b_loss",)
+        assert keys.metric_keys_truncated
+
+
+def test_search_runs_data_projection_is_workspace_scoped(workspace_tracking_store):
+    exp_a_id, run_a = _create_run(workspace_tracking_store, "team-a", "proj-exp-a", "run-a")
+    exp_b_id, run_b = _create_run(workspace_tracking_store, "team-b", "proj-exp-b", "run-b")
+    _log_run_data(workspace_tracking_store, "team-a", run_a.info.run_id, "a")
+    _log_run_data(workspace_tracking_store, "team-b", run_b.info.run_id, "b")
+    projection = RunDataProjection(
+        metric_keys=["a_loss", "b_loss", "shared_acc"], param_keys=["a_lr", "b_lr"]
+    )
+
+    with WorkspaceContext("team-a"):
+        runs = workspace_tracking_store.search_runs(
+            [exp_a_id, exp_b_id], None, ViewType.ALL, data_projection=projection
+        )
+        assert [run.info.run_id for run in runs] == [run_a.info.run_id]
+        assert runs[0].data.metrics == {"a_loss": 1.0, "shared_acc": 0.5}
+        assert runs[0].data.params == {"a_lr": "0.1"}
+
+        assert (
+            workspace_tracking_store.search_runs(
+                [exp_b_id], None, ViewType.ALL, data_projection=projection
+            )
+            == []
+        )
+
+    with WorkspaceContext("team-b"):
+        runs = workspace_tracking_store.search_runs(
+            [exp_a_id, exp_b_id], None, ViewType.ALL, data_projection=projection
+        )
+        assert [run.info.run_id for run in runs] == [run_b.info.run_id]
+        assert runs[0].data.metrics == {"b_loss": 1.0, "shared_acc": 0.5}
+        assert runs[0].data.params == {"b_lr": "0.1"}
+
+        # An empty projection returns no metrics and params, and filters still see all the data
+        runs = workspace_tracking_store.search_runs(
+            [exp_a_id, exp_b_id],
+            "metrics.b_loss = 1 and params.shared_seed = '7'",
+            ViewType.ALL,
+            data_projection=RunDataProjection(),
+        )
+        assert [run.info.run_id for run in runs] == [run_b.info.run_id]
+        assert runs[0].data.metrics == {}
+        assert runs[0].data.params == {}
 
 
 def test_search_datasets_is_workspace_scoped(workspace_tracking_store):

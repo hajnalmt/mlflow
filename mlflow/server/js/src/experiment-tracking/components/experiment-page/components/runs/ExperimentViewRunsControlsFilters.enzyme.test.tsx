@@ -1,6 +1,7 @@
 import { jest, describe, test, expect } from '@jest/globals';
 import { DesignSystemProvider } from '@databricks/design-system';
 import { IntlProvider } from 'react-intl';
+import { QueryClient, QueryClientProvider } from '@databricks/web-shared/query-client';
 import { BrowserRouter } from '../../../../../common/utils/RoutingUtils';
 import { mountWithIntl } from '@mlflow/mlflow/src/common/utils/TestUtils.enzyme';
 import { EXPERIMENT_RUNS_MOCK_STORE } from '../../fixtures/experiment-runs.fixtures';
@@ -43,9 +44,11 @@ const doSimpleMock = (props: ExperimentViewRunsControlsFiltersProps) =>
     <Provider store={minimalStore}>
       <DesignSystemProvider>
         <IntlProvider locale="en">
-          <BrowserRouter>
-            <ExperimentViewRunsControlsFilters {...props} />
-          </BrowserRouter>
+          <QueryClientProvider client={new QueryClient()}>
+            <BrowserRouter>
+              <ExperimentViewRunsControlsFilters {...props} />
+            </BrowserRouter>
+          </QueryClientProvider>
         </IntlProvider>
       </DesignSystemProvider>
     </Provider>,

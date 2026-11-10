@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         OnlineScoringConfig,
     )
 from mlflow.entities.metric import MetricWithRunId
+from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.entities.trace import Span, Trace
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.workspace import TraceArchivalConfig
@@ -1047,6 +1048,7 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
         max_results=SEARCH_MAX_RESULTS_DEFAULT,
         order_by=None,
         page_token=None,
+        data_projection=None,
     ):
         """
         Return runs that match the given list of search expressions within the experiments.
@@ -1059,6 +1061,11 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
             order_by: List of order_by clauses.
             page_token: Token specifying the next page of results. It should be obtained from
                 a ``search_runs`` call.
+            data_projection: An optional
+                :py:class:`mlflow.entities.run_data_projection.RunDataProjection` restricting
+                the metrics and params returned for each run. If ``None``, all metrics and params
+                are returned. Stores that do not support projections raise a ``TypeError`` when
+                one is given.
 
         Returns:
             A :py:class:`PagedList <mlflow.store.entities.PagedList>` of
@@ -1068,6 +1075,9 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
             implementations may not support pagination and thus the returned token would not be
             meaningful in such cases.
         """
+        # Only forward the projection when requested so that third-party stores that implement
+        # ``_search_runs`` without projection support keep working unchanged.
+        extra_kwargs = {} if data_projection is None else {"data_projection": data_projection}
         runs, token = self._search_runs(
             experiment_ids,
             filter_string,
@@ -1075,6 +1085,7 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
             max_results,
             order_by,
             page_token,
+            **extra_kwargs,
         )
         return PagedList(runs, token)
 
@@ -1087,6 +1098,7 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
         max_results,
         order_by,
         page_token,
+        data_projection=None,
     ):
         """
         Return runs that match the given list of search expressions within the experiments, as
@@ -1101,6 +1113,35 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
             :py:class:`mlflow.entities.Run` objects that satisfy the search expressions,
             and ``token`` is the pagination token for the next page of results.
         """
+
+    def get_run_data_keys(
+        self,
+        experiment_ids: list[str],
+        run_view_type: ViewType = ViewType.ACTIVE_ONLY,
+        search: str | None = None,
+        max_results: int | None = None,
+    ) -> RunDataKeys:
+        """
+        Return the distinct metric and param keys that are logged on the runs of the given
+        experiments, without their values. The returned keys can be used to build a
+        ``data_projection`` for ``search_runs``.
+
+        Args:
+            experiment_ids: List of experiment ids to collect the keys of.
+            run_view_type: ACTIVE_ONLY, DELETED_ONLY, or ALL runs.
+            search: If set, only keys that contain this text (case-insensitive) are returned.
+            max_results: Maximum number of metric keys and of param keys to return, each. If
+                ``None``, all matching keys are returned.
+
+        Returns:
+            A :py:class:`mlflow.entities.run_data_keys.RunDataKeys` holding the sorted, distinct
+            keys of the (latest) metrics and of the params. If more keys than ``max_results``
+            matched, the first ones in sorted order are returned and the matching ``*_truncated``
+            flag is set.
+        """
+        raise MlflowNotImplementedException(
+            f"{self.__class__.__name__} does not support `get_run_data_keys`."
+        )
 
     @abstractmethod
     def log_batch(self, run_id, metrics, params, tags):

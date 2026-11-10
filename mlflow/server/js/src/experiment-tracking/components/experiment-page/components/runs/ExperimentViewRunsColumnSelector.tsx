@@ -23,6 +23,7 @@ import {
 } from '../../utils/experimentPage.common-utils';
 import type { ExperimentRunsSelectorResult } from '../../utils/experimentRuns.selector';
 import { customMetricBehaviorDefs } from '../../utils/customMetricBehaviorUtils';
+import { RUN_DATA_KEYS_MAX_RESULTS, useExperimentRunDataKeys } from '../../hooks/useExperimentRunDataKeys';
 
 /**
  * We need to recreate antd's tree check callback signature since it's not importable
@@ -70,6 +71,13 @@ const findMatching = (values: string[], filterQuery: string) =>
   values.filter((v) => v.toLowerCase().includes(filterQuery.toLowerCase()));
 
 /**
+ * Merges the sorted lists of keys without duplicates and returns the keys that match the filter query.
+ * Used to combine the keys that the server found with the ones from the loaded runs and the selected columns.
+ */
+const mergeMatching = (filterQuery: string, ...keyLists: string[][]) =>
+  findMatching(Array.from(new Set(keyLists.flat())).sort(), filterQuery);
+
+/**
  * Function dissects given string and wraps the
  * searched query with <strong>...</strong> if found. Used for highlighting search.
  */
@@ -98,6 +106,10 @@ export interface ExperimentViewRunsColumnSelectorProps {
   onChangeColumnSelectorVisible: (value: boolean) => void;
   selectedColumns: string[];
   onResetColumns: () => void;
+  /**
+   * Whether to look up the keys of active or deleted runs
+   */
+  runViewType?: string;
 }
 
 /**
@@ -111,6 +123,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     onChangeColumnSelectorVisible,
     selectedColumns,
     onResetColumns,
+    runViewType,
   }: ExperimentViewRunsColumnSelectorProps) => {
     const updateUIState = useUpdateExperimentViewUIState();
     const experimentIds = useExperimentIds();
@@ -137,17 +150,58 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     // Extract unique list of tags
     const tagsKeyList = useMemo(() => Utils.getVisibleTagKeyList(runsData.tagsList), [runsData]);
 
+    // The runs only hold the metrics and params of the displayed columns, and the experiment can log tens of
+    // thousands of others. Look up the keys that match the search on the server instead of listing them all.
+    const {
+      metricKeys: serverMetricKeys,
+      paramKeys: serverParamKeys,
+      metricKeysTruncated,
+      paramKeysTruncated,
+      isSearching,
+    } = useExperimentRunDataKeys({
+      experimentIds,
+      search: filter,
+      runViewType,
+      enabled: columnSelectorVisible,
+    });
+
+    // Selected columns are always listed, so they can be unselected even if the search does not find them
+    const selectedMetricKeys = useMemo(
+      () =>
+        selectedColumns
+          .filter((column) => isCanonicalSortKeyOfType(column, COLUMN_TYPES.METRICS))
+          .map((column) => extractCanonicalSortKey(column, COLUMN_TYPES.METRICS)),
+      [selectedColumns],
+    );
+    const selectedParamKeys = useMemo(
+      () =>
+        selectedColumns
+          .filter((column) => isCanonicalSortKeyOfType(column, COLUMN_TYPES.PARAMS))
+          .map((column) => extractCanonicalSortKey(column, COLUMN_TYPES.PARAMS)),
+      [selectedColumns],
+    );
+
+    // Keys that match the search: found by the server, loaded with the runs or selected
+    const matchingMetricKeys = useMemo(
+      () => mergeMatching(filter, serverMetricKeys, runsData.metricKeyList, selectedMetricKeys),
+      [filter, serverMetricKeys, runsData.metricKeyList, selectedMetricKeys],
+    );
+    const matchingParamKeys = useMemo(
+      () => mergeMatching(filter, serverParamKeys, runsData.paramKeyList, selectedParamKeys),
+      [filter, serverParamKeys, runsData.paramKeyList, selectedParamKeys],
+    );
+
     // Extract canonical key names for attributes, params, metrics and tags.
     const canonicalKeyNames = useMemo(
       () => ({
         [COLUMN_TYPES.ATTRIBUTES]: attributeColumnNames.map((key) =>
           makeCanonicalSortKey(COLUMN_TYPES.ATTRIBUTES, key),
         ),
-        [COLUMN_TYPES.PARAMS]: runsData.paramKeyList.map((key) => makeCanonicalSortKey(COLUMN_TYPES.PARAMS, key)),
-        [COLUMN_TYPES.METRICS]: runsData.metricKeyList.map((key) => makeCanonicalSortKey(COLUMN_TYPES.METRICS, key)),
+        [COLUMN_TYPES.PARAMS]: matchingParamKeys.map((key) => makeCanonicalSortKey(COLUMN_TYPES.PARAMS, key)),
+        [COLUMN_TYPES.METRICS]: matchingMetricKeys.map((key) => makeCanonicalSortKey(COLUMN_TYPES.METRICS, key)),
         [COLUMN_TYPES.TAGS]: tagsKeyList.map((key) => makeCanonicalSortKey(COLUMN_TYPES.TAGS, key)),
       }),
-      [runsData, attributeColumnNames, tagsKeyList],
+      [attributeColumnNames, tagsKeyList, matchingParamKeys, matchingMetricKeys],
     );
 
     // This memoized value holds the tree structure generated from
@@ -156,8 +210,8 @@ export const ExperimentViewRunsColumnSelector = React.memo(
       const result = [];
 
       const filteredAttributes = findMatching(attributeColumnNames, filter);
-      const filteredParams = findMatching(runsData.paramKeyList, filter);
-      const filteredMetrics = findMatching(runsData.metricKeyList, filter);
+      const filteredParams = matchingParamKeys;
+      const filteredMetrics = matchingMetricKeys;
       const filteredTags = findMatching(tagsKeyList, filter);
 
       if (filteredAttributes.length) {
@@ -173,7 +227,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
       if (filteredMetrics.length) {
         result.push({
           key: GROUP_KEY_METRICS,
-          title: `Metrics (${filteredMetrics.length})`,
+          title: `Metrics (${filteredMetrics.length}${metricKeysTruncated ? '+' : ''})`,
           children: filteredMetrics.map((metricKey) => {
             const customColumnDef = customMetricBehaviorDefs[metricKey];
             return {
@@ -186,7 +240,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
       if (filteredParams.length) {
         result.push({
           key: GROUP_KEY_PARAMS,
-          title: `Parameters (${filteredParams.length})`,
+          title: `Parameters (${filteredParams.length}${paramKeysTruncated ? '+' : ''})`,
           children: filteredParams.map((paramKey) => ({
             key: makeCanonicalSortKey(COLUMN_TYPES.PARAMS, paramKey),
             title: createHighlightedNode(paramKey, filter),
@@ -205,7 +259,15 @@ export const ExperimentViewRunsColumnSelector = React.memo(
       }
 
       return result;
-    }, [attributeColumnNames, filter, runsData, tagsKeyList]);
+    }, [
+      attributeColumnNames,
+      filter,
+      tagsKeyList,
+      matchingMetricKeys,
+      matchingParamKeys,
+      metricKeysTruncated,
+      paramKeysTruncated,
+    ]);
 
     // This callback toggles entire group of keys
     const toggleGroup = useCallback(
@@ -311,6 +373,8 @@ export const ExperimentViewRunsColumnSelector = React.memo(
             overflowY: 'scroll',
             overflowX: 'hidden',
             paddingBottom: theme.spacing.md,
+            // Dim the list while the result of the search is being loaded
+            opacity: isSearching ? 0.6 : 1,
             'span[title]': {
               whiteSpace: 'nowrap',
               textOverflow: 'ellipsis',
@@ -331,6 +395,18 @@ export const ExperimentViewRunsColumnSelector = React.memo(
             defaultExpandedKeys={[GROUP_KEY_ATTRIBUTES, GROUP_KEY_PARAMS, GROUP_KEY_METRICS, GROUP_KEY_TAGS]}
             treeData={treeData}
           />
+          {(metricKeysTruncated || paramKeysTruncated) && (
+            <div
+              data-testid="column-selector-truncated-hint"
+              css={{ padding: `${theme.spacing.xs}px ${theme.spacing.md}px`, color: theme.colors.textSecondary }}
+            >
+              <FormattedMessage
+                defaultMessage="Showing the first {maxResults} matching metrics and parameters. Type in the search box to find the others."
+                description="Hint below the list of columns in the experiment runs table column selector, displayed when the experiment logs more metrics or parameters than are listed"
+                values={{ maxResults: RUN_DATA_KEYS_MAX_RESULTS }}
+              />
+            </div>
+          )}
         </div>
         <div
           css={{

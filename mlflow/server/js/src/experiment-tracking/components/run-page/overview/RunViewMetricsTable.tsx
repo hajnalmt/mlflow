@@ -24,6 +24,7 @@ import { flexRender, getCoreRowModel } from '@tanstack/react-table';
 import type { UseGetRunQueryResponseRunInfo } from '../hooks/useGetRunQuery';
 import { isUndefined } from 'lodash';
 import { useExperimentTrackingDetailsPageLayoutStyles } from '../../../hooks/useExperimentTrackingDetailsPageLayoutStyles';
+import { DETAILS_OVERVIEW_TABLE_PAGE_SIZE, DetailsOverviewShowMoreRows } from '../../DetailsOverviewShowMoreRows';
 
 const { systemMetricsLabel, modelMetricsLabel } = defineMessages({
   systemMetricsLabel: {
@@ -36,10 +37,10 @@ const { systemMetricsLabel, modelMetricsLabel } = defineMessages({
   },
 });
 
-const metricKeyMatchesFilter =
-  (filter: string) =>
-  ({ key }: MetricEntity) =>
-    key.toLowerCase().includes(filter.toLowerCase());
+const metricKeyMatchesFilter = (filter: string) => {
+  const filterLower = filter.toLowerCase();
+  return ({ key }: MetricEntity) => key.toLowerCase().includes(filterLower);
+};
 
 interface MetricEntityWithLoggedModels extends MetricEntity {
   loggedModels?: LoggedModelProto[];
@@ -47,12 +48,26 @@ interface MetricEntityWithLoggedModels extends MetricEntity {
 
 const RunViewMetricsTableSection = ({
   metricsList,
+  totalCount,
+  anyRowHasModels,
   runInfo,
   header,
   table,
 }: {
   runInfo: RunInfoEntity | UseGetRunQueryResponseRunInfo;
+  /**
+   * Metrics that are rendered, which can be fewer than all metrics of the section.
+   */
   metricsList: MetricEntityWithLoggedModels[];
+  /**
+   * Number of all metrics of the section, including the ones that are not rendered yet.
+   */
+  totalCount: number;
+  /**
+   * Whether any metric has logged models. The columns are defined for all metrics, so it can't be
+   * derived from the rendered ones only.
+   */
+  anyRowHasModels: boolean;
   header?: React.ReactNode;
   table: TableDef<MetricEntityWithLoggedModels>;
 }) => {
@@ -61,16 +76,15 @@ const RunViewMetricsTableSection = ({
 
   const valueColumn = otherColumns.find((column) => column.id === 'value')?.column;
 
-  const anyRowHasModels = metricsList.some(({ loggedModels }) => !isEmpty(loggedModels));
   const modelColumn = otherColumns.find((column) => column.id === 'models')?.column;
 
-  return metricsList.length ? (
+  return totalCount ? (
     <>
       {header && (
         <TableRow>
           <TableCell css={{ flex: 1, backgroundColor: theme.colors.backgroundSecondary }}>
             <Typography.Text bold>
-              {header} ({metricsList.length})
+              {header} ({totalCount})
             </Typography.Text>
           </TableCell>
         </TableRow>
@@ -159,6 +173,7 @@ export const RunViewMetricsTable = ({
   const { detailsPageTableStyles, detailsPageNoEntriesStyles } = useExperimentTrackingDetailsPageLayoutStyles();
   const intl = useIntl();
   const [filter, setFilter] = useState('');
+  const [visibleCount, setVisibleCount] = useState(DETAILS_OVERVIEW_TABLE_PAGE_SIZE);
 
   /**
    * Aggregate logged models by metric key.
@@ -264,6 +279,19 @@ export const RunViewMetricsTable = ({
     ];
   }, [filter, metricValues, intl]);
 
+  // Runs can log thousands of metrics, so only a limited number of rows is rendered at once.
+  // The first segments take the rows first, filtering and counts still cover all metrics.
+  const totalMetricsCount = sum(metricSegments.map(({ metrics }) => metrics.length));
+  const visibleMetricSegments = useMemo(() => {
+    let remainingRows = visibleCount;
+    return metricSegments.map((segment) => {
+      const metrics = segment.metrics.slice(0, remainingRows);
+      remainingRows -= metrics.length;
+      return { ...segment, metrics, totalCount: segment.metrics.length };
+    });
+  }, [metricSegments, visibleCount]);
+  const visibleMetricsCount = sum(visibleMetricSegments.map(({ metrics }) => metrics.length));
+
   const table = useReactTable<MetricEntity>(
     'mlflow/server/js/src/experiment-tracking/components/run-page/overview/RunViewMetricsTable.tsx',
     {
@@ -292,7 +320,7 @@ export const RunViewMetricsTable = ({
       );
     }
 
-    const areAllResultsFiltered = sum(metricSegments.map(({ metrics }) => metrics.length)) < 1;
+    const areAllResultsFiltered = totalMetricsCount < 1;
 
     return (
       <>
@@ -305,7 +333,10 @@ export const RunViewMetricsTable = ({
               description: 'Run page > Overview > Metrics table > Filter input placeholder',
             })}
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setVisibleCount(DETAILS_OVERVIEW_TABLE_PAGE_SIZE);
+            }}
             allowClear
           />
         </div>
@@ -345,16 +376,23 @@ export const RunViewMetricsTable = ({
               </TableHeader>
             ))}
           </TableRow>
-          {metricSegments.map((segment, index) => (
+          {visibleMetricSegments.map((segment, index) => (
             <RunViewMetricsTableSection
               key={segment.header || index}
               metricsList={segment.metrics}
+              totalCount={segment.totalCount}
+              anyRowHasModels={anyRowHasModels}
               runInfo={runInfo}
               header={segment.header}
               table={table}
             />
           ))}
         </Table>
+        <DetailsOverviewShowMoreRows
+          componentId="mlflow.run_page.overview.metrics_table.show_more"
+          remainingCount={totalMetricsCount - visibleMetricsCount}
+          onShowMore={() => setVisibleCount((count) => count + DETAILS_OVERVIEW_TABLE_PAGE_SIZE)}
+        />
       </>
     );
   };
@@ -371,7 +409,7 @@ export const RunViewMetricsTable = ({
         <FormattedMessage
           defaultMessage="Metrics ({length})"
           description="Run page > Overview > Metrics table > Section title"
-          values={{ length: metricValues.filter(metricKeyMatchesFilter(filter)).length }}
+          values={{ length: totalMetricsCount }}
         />
       </Typography.Title>
       <div

@@ -735,6 +735,25 @@ service MlflowService {
     option (graphql) = {};
   }
 
+  // List the distinct metric and param keys that are logged on the runs of experiments, without
+  // returning any values. Use this to discover the keys that can be requested through
+  // ``SearchRuns.data_projection``.
+  rpc getExperimentRunDataKeys(GetExperimentRunDataKeys) returns (GetExperimentRunDataKeys.Response) {
+    option (rpc) = {
+      endpoints: [
+        {
+          method: "POST"
+          path: "/mlflow/experiments/get-run-data-keys"
+          since: {
+            major: 3
+            minor: 0
+          }
+        }
+      ]
+      visibility: PUBLIC_UNDOCUMENTED
+    };
+  }
+
   // Start a new trace within an experiment.
   rpc startTrace(StartTrace) returns (StartTrace.Response) {
     option (rpc) = {
@@ -3666,6 +3685,21 @@ message SearchRuns {
 
   optional string page_token = 7;
 
+  // Restricts which metrics and params are returned for each matching run. If unset, all
+  // metrics and params are returned. If set, only the listed metric and param keys are
+  // returned, so empty lists mean that no metrics or no params are returned. Tags are
+  // always returned. This only limits the returned data and does not affect which runs
+  // match ``filter`` or how they are ordered.
+  optional DataProjection data_projection = 8;
+
+  message DataProjection {
+    // Keys of the (latest) metrics to return for each run.
+    repeated string metric_keys = 1;
+
+    // Keys of the params to return for each run.
+    repeated string param_keys = 2;
+  }
+
   message Response {
     // Runs that match the search criteria.
     repeated Run runs = 1;
@@ -4608,6 +4642,39 @@ message SearchDatasets {
   message Response {
     // Return the summary for most recently created N datasets, as configured in backend
     repeated DatasetSummary dataset_summaries = 1;
+  }
+}
+
+message GetExperimentRunDataKeys {
+  option (scalapb.message).extends = "com.databricks.rpc.RPC[$this.Response]";
+
+  // List of experiment IDs to collect the keys of. Must contain at least one ID.
+  repeated string experiment_ids = 1;
+
+  // Whether to collect the keys of only active, only deleted, or all runs.
+  // Defaults to only active runs.
+  optional ViewType run_view_type = 2 [default = ACTIVE_ONLY];
+
+  // If set, only keys that contain this text (case-insensitive) are returned.
+  optional string search = 3;
+
+  // Maximum number of metric keys and of param keys to return, each. If more keys match, the
+  // first ones in sorted order are returned and the matching ``*_truncated`` field of the
+  // response is set. Defaults to 1000. Servers may support a threshold of at least 10000.
+  optional int32 max_results = 4 [default = 1000];
+
+  message Response {
+    // Sorted, distinct keys of the (latest) metrics logged on the matching runs.
+    repeated string metric_keys = 1;
+
+    // Sorted, distinct keys of the params logged on the matching runs.
+    repeated string param_keys = 2;
+
+    // Whether more metric keys than ``max_results`` matched, so ``metric_keys`` is incomplete.
+    optional bool metric_keys_truncated = 3;
+
+    // Whether more param keys than ``max_results`` matched, so ``param_keys`` is incomplete.
+    optional bool param_keys_truncated = 4;
   }
 }
 

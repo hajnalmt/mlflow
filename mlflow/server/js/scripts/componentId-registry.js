@@ -635,6 +635,7 @@ module.exports = {
   "mlflow.charts.line_chart_configure.x_axis_type.wall_time.tooltip": "",
   "mlflow.charts.line_chart_configure.y_axis_max": "",
   "mlflow.charts.line_chart_configure.y_axis_min": "",
+  "mlflow.charts.metric_limit_notice": "",
   "mlflow.charts.parallel_coords_chart_configure_button": "",
   "mlflow.charts.scatter_card_title.dataset_tag": "",
   "mlflow.charts.tool_error_rate": "",
@@ -699,6 +700,9 @@ module.exports = {
 
   // -- mlflow.dataset_drawer --
   "mlflow.dataset_drawer.dataset_name_tooltip": "",
+
+  // -- mlflow.details_page --
+  "mlflow.details_page.overview.params_table.show_more": "",
 
   // -- mlflow.detect_issues --
   "mlflow.detect_issues.guidance": "",
@@ -1105,6 +1109,8 @@ module.exports = {
   "mlflow.experiment_page.runs.add_tags": "",
   "mlflow.experiment_page.runs_table.column_selector": "",
   "mlflow.experiment_page.runs_table.column_selector.reset_to_defaults": "",
+  "mlflow.experiment_page.runs_table.load_full_data": "",
+  "mlflow.experiment_page.runs_table.load_full_data.tooltip": "",
   "mlflow.experiment_page.save_and_share_view.link": "",
   "mlflow.experiment_page.save_and_share_view.modal": "",
   "mlflow.experiment_page.save_and_share_view.name_input": "",
@@ -2002,6 +2008,7 @@ module.exports = {
   "mlflow.run_page.overview.logged_model_v3_link": "",
   "mlflow.run_page.overview.metric_chart_link": "",
   "mlflow.run_page.overview.metric_model_link": "",
+  "mlflow.run_page.overview.metrics_table.show_more": "",
   "mlflow.run_page.overview.parent_run_link": "",
   "mlflow.run_page.overview.registered_model_link": "",
   "mlflow.run_page.overview.registered_prompt_link": "",

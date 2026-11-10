@@ -593,7 +593,14 @@ class GetRun(_message.Message):
     def __init__(self, run_id: _Optional[str] = ..., run_uuid: _Optional[str] = ...) -> None: ...
 
 class SearchRuns(_message.Message):
-    __slots__ = ("experiment_ids", "filter", "run_view_type", "max_results", "order_by", "page_token")
+    __slots__ = ("experiment_ids", "filter", "run_view_type", "max_results", "order_by", "page_token", "data_projection")
+    class DataProjection(_message.Message):
+        __slots__ = ("metric_keys", "param_keys")
+        METRIC_KEYS_FIELD_NUMBER: _ClassVar[int]
+        PARAM_KEYS_FIELD_NUMBER: _ClassVar[int]
+        metric_keys: _containers.RepeatedScalarFieldContainer[str]
+        param_keys: _containers.RepeatedScalarFieldContainer[str]
+        def __init__(self, metric_keys: _Optional[_Iterable[str]] = ..., param_keys: _Optional[_Iterable[str]] = ...) -> None: ...
     class Response(_message.Message):
         __slots__ = ("runs", "next_page_token")
         RUNS_FIELD_NUMBER: _ClassVar[int]
@@ -607,13 +614,15 @@ class SearchRuns(_message.Message):
     MAX_RESULTS_FIELD_NUMBER: _ClassVar[int]
     ORDER_BY_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    DATA_PROJECTION_FIELD_NUMBER: _ClassVar[int]
     experiment_ids: _containers.RepeatedScalarFieldContainer[str]
     filter: str
     run_view_type: ViewType
     max_results: int
     order_by: _containers.RepeatedScalarFieldContainer[str]
     page_token: str
-    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., filter: _Optional[str] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ..., max_results: _Optional[int] = ..., order_by: _Optional[_Iterable[str]] = ..., page_token: _Optional[str] = ...) -> None: ...
+    data_projection: SearchRuns.DataProjection
+    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., filter: _Optional[str] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ..., max_results: _Optional[int] = ..., order_by: _Optional[_Iterable[str]] = ..., page_token: _Optional[str] = ..., data_projection: _Optional[_Union[SearchRuns.DataProjection, _Mapping]] = ...) -> None: ...
 
 class ListArtifacts(_message.Message):
     __slots__ = ("run_id", "run_uuid", "path", "page_token")
@@ -1375,6 +1384,29 @@ class SearchDatasets(_message.Message):
     EXPERIMENT_IDS_FIELD_NUMBER: _ClassVar[int]
     experiment_ids: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class GetExperimentRunDataKeys(_message.Message):
+    __slots__ = ("experiment_ids", "run_view_type", "search", "max_results")
+    class Response(_message.Message):
+        __slots__ = ("metric_keys", "param_keys", "metric_keys_truncated", "param_keys_truncated")
+        METRIC_KEYS_FIELD_NUMBER: _ClassVar[int]
+        PARAM_KEYS_FIELD_NUMBER: _ClassVar[int]
+        METRIC_KEYS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+        PARAM_KEYS_TRUNCATED_FIELD_NUMBER: _ClassVar[int]
+        metric_keys: _containers.RepeatedScalarFieldContainer[str]
+        param_keys: _containers.RepeatedScalarFieldContainer[str]
+        metric_keys_truncated: bool
+        param_keys_truncated: bool
+        def __init__(self, metric_keys: _Optional[_Iterable[str]] = ..., param_keys: _Optional[_Iterable[str]] = ..., metric_keys_truncated: bool = ..., param_keys_truncated: bool = ...) -> None: ...
+    EXPERIMENT_IDS_FIELD_NUMBER: _ClassVar[int]
+    RUN_VIEW_TYPE_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_FIELD_NUMBER: _ClassVar[int]
+    MAX_RESULTS_FIELD_NUMBER: _ClassVar[int]
+    experiment_ids: _containers.RepeatedScalarFieldContainer[str]
+    run_view_type: ViewType
+    search: str
+    max_results: int
+    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ..., search: _Optional[str] = ..., max_results: _Optional[int] = ...) -> None: ...
 
 class CreateLoggedModel(_message.Message):
     __slots__ = ("experiment_id", "name", "model_type", "source_run_id", "params", "tags")

@@ -64,4 +64,48 @@ describe('DetailsOverviewParamsTable', () => {
 
     expect(screen.getAllByRole('row')).toHaveLength(2); // 1 row + 1 header row
   });
+
+  describe('with more params than the page size', () => {
+    const getRenderedRows = () => document.querySelectorAll('[role="row"]');
+
+    const buildParams = (count: number): Record<string, KeyValueEntity> =>
+      keyBy(
+        Array.from({ length: count }, (_, index) => ({
+          key: `param_${index.toString().padStart(3, '0')}`,
+          value: `value_${index}`,
+        })),
+        'key',
+      );
+
+    test('renders a page of rows and reveals the rest on demand', async () => {
+      renderComponent(buildParams(250));
+
+      // The title counts all params, but only the first page of rows is rendered
+      expect(screen.getByRole('heading', { name: 'Parameters (250)' })).toBeInTheDocument();
+      expect(getRenderedRows()).toHaveLength(100 + 1);
+      expect(screen.getByText('param_099')).toBeInTheDocument();
+      expect(screen.queryByText('param_100')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show 100 more (150 remaining)' }));
+      expect(getRenderedRows()).toHaveLength(200 + 1);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show 50 more (50 remaining)' }));
+      expect(getRenderedRows()).toHaveLength(250 + 1);
+      expect(screen.getByText('param_249')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Show .* more/ })).not.toBeInTheDocument();
+    });
+
+    test('filters all params, not only the rendered ones, and starts over from the first page', async () => {
+      renderComponent(buildParams(250));
+      await userEvent.click(screen.getByRole('button', { name: 'Show 100 more (150 remaining)' }));
+
+      // This param is beyond the rendered rows
+      await fastFillInput(screen.getByRole('textbox'), 'value_249');
+      expect(screen.getByRole('heading', { name: 'Parameters (1)' })).toBeInTheDocument();
+      expect(screen.getByText('param_249')).toBeInTheDocument();
+
+      await userEvent.clear(screen.getByRole('textbox'));
+      expect(getRenderedRows()).toHaveLength(100 + 1);
+    });
+  });
 });

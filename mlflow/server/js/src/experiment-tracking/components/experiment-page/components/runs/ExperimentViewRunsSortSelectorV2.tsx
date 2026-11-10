@@ -19,6 +19,11 @@ import { useUpdateExperimentViewUIState } from '../../contexts/ExperimentPageUIS
 import { ToggleIconButton } from '../../../../../common/components/ToggleIconButton';
 import { makeCanonicalSortKey } from '../../utils/experimentPage.common-utils';
 import { customMetricBehaviorDefs } from '../../utils/customMetricBehaviorUtils';
+import { useExperimentIds } from '../../hooks/useExperimentIds';
+import { useExperimentRunDataKeys } from '../../hooks/useExperimentRunDataKeys';
+
+// Maximum number of metrics and of params that are looked up on the server for the typed text
+const SERVER_SORT_OPTIONS_MAX_RESULTS = 100;
 
 type SORT_KEY_TYPE = keyof (typeof ATTRIBUTE_COLUMN_SORT_KEY & typeof ATTRIBUTE_COLUMN_SORT_LABEL);
 
@@ -44,14 +49,29 @@ const ExperimentViewRunsSortSelectorV2Body = ({
   const [filter, setFilter] = useState('');
   const firstElementRef = useRef<HTMLDivElement>(null);
 
+  // The runs only hold the metrics and params of the displayed columns, so the metrics and params
+  // that match the search query are looked up on the server too.
+  const experimentIds = useExperimentIds();
+  const { metricKeys: serverMetricKeys, paramKeys: serverParamKeys } = useExperimentRunDataKeys({
+    experimentIds,
+    search: filter,
+    maxResults: SERVER_SORT_OPTIONS_MAX_RESULTS,
+  });
+
   // Merge all sort options and filter them by the search query
-  const filteredSortOptions = useMemo(
-    () =>
-      sortOptions.filter((option) => {
-        return option.label.toLowerCase().includes(filter.toLowerCase());
-      }),
-    [sortOptions, filter],
-  );
+  const filteredSortOptions = useMemo(() => {
+    const serverSortOptions = [
+      ...serverMetricKeys.map((key) => ({
+        label: customMetricBehaviorDefs[key]?.displayName ?? key,
+        value: makeCanonicalSortKey(COLUMN_TYPES.METRICS, key),
+      })),
+      ...serverParamKeys.map((key) => ({ label: key, value: makeCanonicalSortKey(COLUMN_TYPES.PARAMS, key) })),
+    ];
+    const knownSortOptionValues = new Set(sortOptions.map((option) => option.value));
+    return [...sortOptions, ...serverSortOptions.filter((option) => !knownSortOptionValues.has(option.value))].filter(
+      (option) => option.label.toLowerCase().includes(filter.toLowerCase()),
+    );
+  }, [sortOptions, filter, serverMetricKeys, serverParamKeys]);
 
   const handleChange = (orderByKey: string) => {
     setUrlSearchFacets({

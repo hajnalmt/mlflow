@@ -1,5 +1,5 @@
 import { LegacySkeleton, useDesignSystemTheme } from '@databricks/design-system';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ErrorCodes } from '../../../common/constants';
 import { getExperimentApi } from '../../actions';
 import { ExperimentKind, EXPERIMENT_PAGE_VIEW_STATE_SHARE_URL_PARAM_KEY } from '../../constants';
@@ -22,6 +22,8 @@ import { ExperimentViewSharedViewBanner } from './components/header/ExperimentVi
 import { useDispatch } from 'react-redux';
 import type { ThunkDispatch } from '../../../redux-types';
 import { useExperimentRuns } from './hooks/useExperimentRuns';
+import { createRunsDataProjection } from './utils/experimentPage.data-projection';
+import { normalizeRunsGroupByKey } from './utils/experimentPage.group-row-utils';
 import type { ExperimentRunsSelectorResult } from './utils/experimentRuns.selector';
 import { useSharedExperimentViewState } from './hooks/useSharedExperimentViewState';
 import { useInitializeUIState } from './hooks/useInitializeUIState';
@@ -104,6 +106,19 @@ export const ExperimentView = ({ showHeader = true }: { showHeader?: boolean }) 
   // Get the maximized state from the new view state model if flag is set
   const isMaximized = uiState.viewMaximized;
 
+  // Only load the metrics and params that the runs table displays, sorts or groups by and the charts use. The
+  // runs of the experiments might log thousands of them, and loading all of them makes the table slow to load.
+  const dataProjection = useMemo(
+    () =>
+      createRunsDataProjection({
+        selectedColumns: uiState.selectedColumns,
+        orderByKey: searchFacets?.orderByKey,
+        groupBy: normalizeRunsGroupByKey(uiState.groupBy),
+        charts: uiState.compareRunCharts,
+      }),
+    [uiState.selectedColumns, uiState.groupBy, uiState.compareRunCharts, searchFacets?.orderByKey],
+  );
+
   const {
     isLoadingRuns,
     loadMoreRuns,
@@ -111,7 +126,9 @@ export const ExperimentView = ({ showHeader = true }: { showHeader?: boolean }) 
     moreRunsAvailable,
     requestError: runsRequestError,
     refreshRuns,
-  } = useExperimentRuns(uiState, searchFacets, experimentIds);
+    loadFullRunData,
+    isLoadingFullRunData,
+  } = useExperimentRuns(uiState, searchFacets, experimentIds, false, dataProjection);
 
   useEffect(() => {
     // If the new tabbed UI is enabled, fetch the experiments only if they are not already loaded.
@@ -290,6 +307,8 @@ export const ExperimentView = ({ showHeader = true }: { showHeader?: boolean }) 
         moreRunsAvailable={moreRunsAvailable}
         requestError={runsRequestError}
         refreshRuns={refreshRuns}
+        loadFullRunData={loadFullRunData}
+        isLoadingFullRunData={isLoadingFullRunData}
         uiState={uiState}
       />
     );

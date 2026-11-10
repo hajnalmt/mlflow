@@ -23,6 +23,7 @@ import type { Interpolation, Theme } from '@emotion/react';
 import { ExpandedJSONValueCell } from '@mlflow/mlflow/src/common/components/ExpandableCell';
 import { isUnstableNestedComponentsMigrated } from '../../common/utils/FeatureUtils';
 import { useExperimentTrackingDetailsPageLayoutStyles } from '../hooks/useExperimentTrackingDetailsPageLayoutStyles';
+import { DETAILS_OVERVIEW_TABLE_PAGE_SIZE, DetailsOverviewShowMoreRows } from './DetailsOverviewShowMoreRows';
 
 type ParamsColumnDef = ColumnDef<KeyValueEntity> & {
   meta?: { styles?: Interpolation<Theme>; multiline?: boolean };
@@ -182,14 +183,17 @@ export const DetailsOverviewParamsTable = ({
   const { detailsPageTableStyles, detailsPageNoEntriesStyles } = useExperimentTrackingDetailsPageLayoutStyles();
   const paramsValues = useMemo(() => values(params), [params]);
 
-  const paramsList = useMemo(
-    () =>
-      paramsValues.filter(({ key, value }) => {
-        const filterLower = filter.toLowerCase();
-        return key.toLowerCase().includes(filterLower) || value.toLowerCase().includes(filterLower);
-      }),
-    [filter, paramsValues],
-  );
+  const [visibleCount, setVisibleCount] = useState(DETAILS_OVERVIEW_TABLE_PAGE_SIZE);
+
+  const paramsList = useMemo(() => {
+    const filterLower = filter.toLowerCase();
+    return paramsValues.filter(
+      ({ key, value }) => key.toLowerCase().includes(filterLower) || value.toLowerCase().includes(filterLower),
+    );
+  }, [filter, paramsValues]);
+
+  // Only a limited number of rows is mounted, every row of this table observes its own size
+  const visibleParamsList = useMemo(() => paramsList.slice(0, visibleCount), [paramsList, visibleCount]);
 
   const columns = useMemo<ParamsColumnDef[]>(
     () =>
@@ -237,7 +241,7 @@ export const DetailsOverviewParamsTable = ({
   );
 
   const table = useReactTable('mlflow/server/js/src/experiment-tracking/components/DetailsOverviewParamsTable.tsx', {
-    data: paramsList,
+    data: visibleParamsList,
     getCoreRowModel: getCoreRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     getRowId: (row) => row.key,
@@ -276,7 +280,10 @@ export const DetailsOverviewParamsTable = ({
               description: 'Run page > Overview > Parameters table > Filter input placeholder',
             })}
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setVisibleCount(DETAILS_OVERVIEW_TABLE_PAGE_SIZE);
+            }}
             allowClear
           />
         </div>
@@ -336,6 +343,11 @@ export const DetailsOverviewParamsTable = ({
             </TableRow>
           ))}
         </Table>
+        <DetailsOverviewShowMoreRows
+          componentId="mlflow.details_page.overview.params_table.show_more"
+          remainingCount={paramsList.length - visibleParamsList.length}
+          onShowMore={() => setVisibleCount((count) => count + DETAILS_OVERVIEW_TABLE_PAGE_SIZE)}
+        />
       </>
     );
   };

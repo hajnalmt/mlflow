@@ -17,6 +17,7 @@ import type { ExperimentPageSearchFacetsState } from '../models/ExperimentPageSe
 import { RUNS_SEARCH_MAX_RESULTS } from '../../../actions';
 import { getUUID } from '../../../../common/utils/ActionUtils';
 import { shouldUseRegexpBasedAutoRunsSearchFilter } from '../../../../common/utils/FeatureUtils';
+import type { RunsDataProjection } from './experimentPage.data-projection';
 
 const START_TIME_COLUMN_OFFSET = {
   ALL: null,
@@ -135,6 +136,8 @@ const shouldNestChildrenAndFetchParents = ({ orderByKey, searchFilter }: Experim
  * @param searchFacetsState the sort/filter model to use
  * @param referenceTime reference time to calculate startTime filter
  * @param pageToken next page token if fetching the next page
+ * @param maxResults maximum number of runs to fetch
+ * @param dataProjection if set, only the listed metrics and params are fetched for each run
  */
 export const createSearchRunsParams = (
   experimentIds: string[],
@@ -142,6 +145,7 @@ export const createSearchRunsParams = (
   referenceTime: number,
   pageToken?: string,
   maxResults?: number,
+  dataProjection?: RunsDataProjection,
 ) => {
   const runViewType =
     searchFacetsState.lifecycleFilter === LIFECYCLE_FILTER.ACTIVE ? ViewType.ACTIVE_ONLY : ViewType.DELETED_ONLY;
@@ -169,6 +173,9 @@ export const createSearchRunsParams = (
     runsPinned,
 
     maxResults: maxResults || RUNS_SEARCH_MAX_RESULTS,
+
+    // Metrics and params to fetch for each run, all of them if not set
+    dataProjection,
   };
 };
 /**
