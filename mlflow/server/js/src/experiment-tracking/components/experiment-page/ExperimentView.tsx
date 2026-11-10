@@ -106,16 +106,17 @@ export const ExperimentView = ({ showHeader = true }: { showHeader?: boolean }) 
   // Get the maximized state from the new view state model if flag is set
   const isMaximized = uiState.viewMaximized;
 
-  // Only load the metrics and params that the runs table displays, sorts or groups by. The runs of the
-  // experiments might log thousands of them, and loading all of them makes the table slow to load.
+  // Only load the metrics and params that the runs table displays, sorts or groups by and the charts use. The
+  // runs of the experiments might log thousands of them, and loading all of them makes the table slow to load.
   const dataProjection = useMemo(
     () =>
       createRunsDataProjection({
         selectedColumns: uiState.selectedColumns,
         orderByKey: searchFacets?.orderByKey,
         groupBy: normalizeRunsGroupByKey(uiState.groupBy),
+        charts: uiState.compareRunCharts,
       }),
-    [uiState.selectedColumns, uiState.groupBy, searchFacets?.orderByKey],
+    [uiState.selectedColumns, uiState.groupBy, uiState.compareRunCharts, searchFacets?.orderByKey],
   );
 
   const {
