@@ -1,6 +1,6 @@
-import { describe, jest, test, expect } from '@jest/globals';
+import { describe, jest, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { IntlProvider } from 'react-intl';
-import { render, screen } from '../../../../../common/utils/TestUtils.react18';
+import { render, screen, waitFor } from '../../../../../common/utils/TestUtils.react18';
 import type { ExperimentRunsSelectorResult } from '../../utils/experimentRuns.selector';
 import { ExperimentViewRunsGroupBySelector } from './ExperimentViewRunsGroupBySelector';
 import userEventGlobal, { PointerEventsCheckLevel } from '@testing-library/user-event';
@@ -8,6 +8,9 @@ import { DesignSystemProvider } from '@databricks/design-system';
 import type { RunsGroupByConfig } from '../../utils/experimentPage.group-row-utils';
 import { RunGroupingAggregateFunction, RunGroupingMode } from '../../utils/experimentPage.row-types';
 import { useState } from 'react';
+import { MemoryRouter, Route, Routes } from '../../../../../common/utils/RoutingUtils';
+import { QueryClient, QueryClientProvider } from '@databricks/web-shared/query-client';
+import { MlflowService } from '../../../../sdk/MlflowService';
 
 // eslint-disable-next-line no-restricted-syntax -- TODO(FEINF-4392)
 jest.setTimeout(30000);
@@ -15,6 +18,17 @@ jest.setTimeout(30000);
 const userEvent = userEventGlobal.setup({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 
 describe('ExperimentViewRunsGroupBySelector', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    queryClient = new QueryClient();
+    jest.spyOn(MlflowService, 'getExperimentRunDataKeys').mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   const runsDataDatasets: Partial<ExperimentRunsSelectorResult> = {
     datasetsList: [
       [
@@ -64,9 +78,20 @@ describe('ExperimentViewRunsGroupBySelector', () => {
     };
     return render(<TestComponent />, {
       wrapper: ({ children }) => (
-        <IntlProvider locale="en">
-          <DesignSystemProvider>{children}</DesignSystemProvider>
-        </IntlProvider>
+        <MemoryRouter initialEntries={['/experiments/123']}>
+          <Routes>
+            <Route
+              path="/experiments/:experimentId"
+              element={
+                <IntlProvider locale="en">
+                  <DesignSystemProvider>
+                    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+                  </DesignSystemProvider>
+                </IntlProvider>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
       ),
     });
   };
@@ -262,5 +287,66 @@ describe('ExperimentViewRunsGroupBySelector', () => {
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'param2' }));
 
     expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+
+  describe('params looked up on the server', () => {
+    test('lists the params of the experiment that are not loaded in the runs table', async () => {
+      jest.mocked(MlflowService.getExperimentRunDataKeys).mockResolvedValue({
+        param_keys: ['param1', 'server_param_a', 'server_param_b'],
+      });
+      // No params are loaded, the runs table only requests the params that it displays
+      renderComponent(null, { ...defaultRunsData, paramKeyList: [] });
+
+      await userEvent.click(screen.getByRole('button', { name: /Group by/ }));
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'server_param_a' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'server_param_b' })).toBeInTheDocument();
+      expect(screen.queryByText('No params')).not.toBeInTheDocument();
+      expect(MlflowService.getExperimentRunDataKeys).toHaveBeenCalledWith(
+        expect.objectContaining({ experiment_ids: ['123'] }),
+      );
+    });
+
+    test('lists the params that are loaded and the ones from the server once each', async () => {
+      jest.mocked(MlflowService.getExperimentRunDataKeys).mockResolvedValue({
+        param_keys: ['param1', 'server_param'],
+      });
+      renderComponent();
+
+      await userEvent.click(screen.getByRole('button', { name: /Group by/ }));
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'server_param' })).toBeInTheDocument();
+      expect(screen.getAllByRole('menuitemcheckbox', { name: 'param1' })).toHaveLength(1);
+      expect(screen.getByRole('menuitemcheckbox', { name: 'param2' })).toBeInTheDocument();
+    });
+
+    test('searches the params on the server with the typed text', async () => {
+      renderComponent(null, { ...defaultRunsData, paramKeyList: [] });
+      await userEvent.click(screen.getByRole('button', { name: /Group by/ }));
+
+      jest.mocked(MlflowService.getExperimentRunDataKeys).mockResolvedValue({ param_keys: ['learning_rate'] });
+      await userEvent.type(screen.getByPlaceholderText('Search'), 'learning');
+
+      await waitFor(() => {
+        expect(MlflowService.getExperimentRunDataKeys).toHaveBeenLastCalledWith(
+          expect.objectContaining({ search: 'learning' }),
+        );
+      });
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'learning_rate' })).toBeInTheDocument();
+    });
+
+    test('groups by a param that is only known from the server', async () => {
+      jest.mocked(MlflowService.getExperimentRunDataKeys).mockResolvedValue({ param_keys: ['server_param'] });
+      const onChange = jest.fn();
+      renderComponent(null, { ...defaultRunsData, paramKeyList: [] }, onChange);
+
+      await userEvent.click(screen.getByRole('button', { name: /Group by/ }));
+      await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'server_param' }));
+
+      expect(onChange).toHaveBeenLastCalledWith({
+        aggregateFunction: 'average',
+        groupByKeys: [{ groupByData: 'server_param', mode: 'param' }],
+      });
+    });
   });
 });

@@ -20,6 +20,11 @@ import type { RunsGroupByConfig } from '../../utils/experimentPage.group-row-uti
 import { createRunsGroupByKey, isGroupedBy, normalizeRunsGroupByKey } from '../../utils/experimentPage.group-row-utils';
 import type { ExperimentRunsSelectorResult } from '../../utils/experimentRuns.selector';
 import { RunGroupingAggregateFunction, RunGroupingMode } from '../../utils/experimentPage.row-types';
+import { useExperimentIds } from '../../hooks/useExperimentIds';
+import { useExperimentRunDataKeys } from '../../hooks/useExperimentRunDataKeys';
+
+// Maximum number of params that are looked up on the server for the typed text
+const SERVER_PARAMS_MAX_RESULTS = 100;
 
 export interface ExperimentViewRunsGroupBySelectorProps {
   runsData: ExperimentRunsSelectorResult;
@@ -128,9 +133,21 @@ const GroupBySelectorBody = ({
   }, []);
 
   const filteredTagNames = tagNames.filter((tag) => tag.toLowerCase().includes(filter.toLowerCase()));
-  const filteredParamNames = runsData.paramKeyList.filter((param) =>
-    param.toLowerCase().includes(filter.toLowerCase()),
+
+  // The runs table only loads the params that it displays, so the params of the runs are looked up on the
+  // server too. The ones that are already loaded are listed as well, they might be missing from the lookup
+  // if it is truncated.
+  const experimentIds = useExperimentIds();
+  const { paramKeys: serverParamKeys } = useExperimentRunDataKeys({
+    experimentIds,
+    search: filter,
+    maxResults: SERVER_PARAMS_MAX_RESULTS,
+  });
+  const paramNames = useMemo(
+    () => uniq([...runsData.paramKeyList, ...serverParamKeys]).sort(),
+    [runsData.paramKeyList, serverParamKeys],
   );
+  const filteredParamNames = paramNames.filter((param) => param.toLowerCase().includes(filter.toLowerCase()));
   const containsDatasets = useMemo(() => !isEmpty(compact(runsData.datasetsList)), [runsData.datasetsList]);
   const attributesMatchFilter = containsDatasets && datasetLabel.toLowerCase().includes(filter.toLowerCase());
 
@@ -339,7 +356,7 @@ const GroupBySelectorBody = ({
                 </DropdownMenu.CheckboxItem>
               );
             })}
-            {!runsData.paramKeyList.length && (
+            {!paramNames.length && (
               <DropdownMenu.Item
                 componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunsgroupbyselector.tsx_342"
                 disabled
