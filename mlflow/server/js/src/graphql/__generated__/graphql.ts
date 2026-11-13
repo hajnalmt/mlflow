@@ -65,7 +65,13 @@ export enum MlflowRunStatus {
   SCHEDULED = 'SCHEDULED'
 }
 
+export type MlflowSearchRunsDataProjectionInput = {
+  metricKeys?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
+  paramKeys?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
+};
+
 export type MlflowSearchRunsInput = {
+  dataProjection?: InputMaybe<MlflowSearchRunsDataProjectionInput>;
   experimentIds?: InputMaybe<Array<InputMaybe<Scalars['String']['input']>>>;
   filter?: InputMaybe<Scalars['String']['input']>;
   maxResults?: InputMaybe<Scalars['Int']['input']>;
@@ -106,4 +112,4 @@ export type MlflowGetExperimentQueryVariables = Exact<{
 }>;
 
 
-export type MlflowGetExperimentQuery = { mlflowGetExperiment: { __typename: 'MlflowGetExperimentResponse', apiError: { __typename: 'ApiError', code: string | null, message: string | null } | null, experiment: { __typename: 'MlflowExperiment', artifactLocation: string | null, creationTime: string | null, experimentId: string | null, lastUpdateTime: string | null, lifecycleStage: string | null, name: string | null, tags: Array<{ __typename: 'MlflowExperimentTag', key: string | null, value: string | null }> | null } | null } | null };
+export type MlflowGetExperimentQuery = { mlflowGetExperiment: { __typename: 'MlflowGetExperimentResponse', apiError: { __typename: 'ApiError', code: string | null, message: string | null } | null, experiment: { __typename: 'MlflowExperiment', artifactLocation: string | null, creationTime: string | null, effectiveTraceArchivalRetention: string | null, experimentId: string | null, lastUpdateTime: string | null, lifecycleStage: string | null, name: string | null, tags: Array<{ __typename: 'MlflowExperimentTag', key: string | null, value: string | null }> | null } | null } | null };

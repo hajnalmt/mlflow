@@ -26,6 +26,7 @@ from mlflow.entities import (
 )
 from mlflow.entities.logged_model_output import LoggedModelOutput
 from mlflow.entities.logged_model_parameter import LoggedModelParameter
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.trace_state import TraceState
 from mlflow.exceptions import MlflowException
@@ -1698,6 +1699,312 @@ def test_search_runs_pagination_with_max_results_none(store: SqlAlchemyStore):
     assert len(result) == 5
     assert [r.info.run_id for r in result] == runs
     assert result.token is None
+
+
+def _log_projection_test_runs(store: SqlAlchemyStore, exp):
+    run_ids = []
+    for i in range(3):
+        run_id = _run_factory(store, _get_run_configs(exp, start_time=10 + i)).info.run_id
+        store.log_batch(
+            run_id,
+            metrics=[
+                Metric(key="m1", value=float(i), timestamp=1, step=0),
+                Metric(key="m2", value=float(i) * 10, timestamp=1, step=0),
+                Metric(key="m3", value=float(i) * 100, timestamp=1, step=0),
+            ],
+            params=[Param("p1", f"a{i}"), Param("p2", f"b{i}")],
+            tags=[RunTag("t1", f"x{i}")],
+        )
+        run_ids.append(run_id)
+    return run_ids
+
+
+def test_get_run_data_keys(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys")
+    _log_projection_test_runs(store, exp)
+    # A second run in the same experiment that adds a new key and repeats existing ones
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric("m1", 5.0, 1, 0), Metric("m4", 4.0, 1, 0)],
+        params=[Param("p3", "c")],
+        tags=[],
+    )
+    # Several steps of the same metric must not yield duplicate keys
+    store.log_batch(
+        run_id,
+        metrics=[Metric("m4", 6.0, 2, 1), Metric("m4", 7.0, 3, 2)],
+        params=[],
+        tags=[],
+    )
+
+    keys = store.get_run_data_keys([exp])
+
+    assert keys.metric_keys == ("m1", "m2", "m3", "m4")
+    assert keys.param_keys == ("p1", "p2", "p3")
+
+
+def test_get_run_data_keys_without_data(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_without_data")
+    _run_factory(store, _get_run_configs(exp))
+
+    keys = store.get_run_data_keys([exp])
+
+    assert keys.metric_keys == ()
+    assert keys.param_keys == ()
+
+
+def test_get_run_data_keys_multiple_experiments(store: SqlAlchemyStore):
+    exp1, exp2, exp3 = _create_experiments(store, ["rdk_exp1", "rdk_exp2", "rdk_exp3"])
+    for exp, metric, param in [(exp1, "m1", "p1"), (exp2, "m2", "p2"), (exp3, "m3", "p3")]:
+        run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+        store.log_batch(
+            run_id, metrics=[Metric(metric, 1.0, 1, 0)], params=[Param(param, "v")], tags=[]
+        )
+
+    keys = store.get_run_data_keys([exp1, exp2])
+
+    # Keys of experiments that were not requested are not leaked
+    assert keys.metric_keys == ("m1", "m2")
+    assert keys.param_keys == ("p1", "p2")
+
+
+def test_get_run_data_keys_respects_run_view_type(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_run_view_type")
+    active_run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    deleted_run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        active_run_id,
+        metrics=[Metric("active_m", 1.0, 1, 0)],
+        params=[Param("active_p", "v")],
+        tags=[],
+    )
+    store.log_batch(
+        deleted_run_id,
+        metrics=[Metric("deleted_m", 1.0, 1, 0)],
+        params=[Param("deleted_p", "v")],
+        tags=[],
+    )
+    store.delete_run(deleted_run_id)
+
+    active = store.get_run_data_keys([exp])
+    assert (active.metric_keys, active.param_keys) == (("active_m",), ("active_p",))
+    assert store.get_run_data_keys([exp], ViewType.ACTIVE_ONLY) == active
+
+    deleted = store.get_run_data_keys([exp], ViewType.DELETED_ONLY)
+    assert (deleted.metric_keys, deleted.param_keys) == (("deleted_m",), ("deleted_p",))
+
+    everything = store.get_run_data_keys([exp], ViewType.ALL)
+    assert everything.metric_keys == ("active_m", "deleted_m")
+    assert everything.param_keys == ("active_p", "deleted_p")
+
+
+def _log_many_keys(store: SqlAlchemyStore, exp):
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric(f"eval/ds{i:02d}/loss", 1.0, 1, 0) for i in range(10)]
+        + [Metric("train/accuracy", 1.0, 1, 0)],
+        params=[Param(f"param_{i}", "v") for i in range(5)] + [Param("Loss_weight", "1")],
+        tags=[],
+    )
+
+
+def test_get_run_data_keys_search(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_search")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], search="LOSS")
+
+    # Case-insensitive substring match on both metrics and params
+    assert keys.metric_keys == tuple(f"eval/ds{i:02d}/loss" for i in range(10))
+    assert keys.param_keys == ("Loss_weight",)
+    assert not keys.metric_keys_truncated
+    assert not keys.param_keys_truncated
+
+
+@pytest.mark.parametrize(
+    ("search", "expected"),
+    [
+        # "_" is a LIKE wildcard for any single character, but must only match a literal "_"
+        ("a_b", ("a_b",)),
+        ("_", ("a_b",)),
+        # "%" is a LIKE wildcard for any text, but must only match a literal "%"
+        ("%", ()),
+        ("a%b", ()),
+        ("\\", ()),
+    ],
+)
+def test_get_run_data_keys_search_treats_wildcards_literally(
+    store: SqlAlchemyStore, search, expected
+):
+    exp = _create_experiments(store, "test_get_run_data_keys_search_wildcards")
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric("a_b", 1.0, 1, 0), Metric("aXb", 1.0, 1, 0)],
+        params=[],
+        tags=[],
+    )
+
+    assert store.get_run_data_keys([exp], search=search).metric_keys == expected
+
+
+def test_get_run_data_keys_max_results_truncates_per_type(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_max_results")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], max_results=3)
+
+    # The first keys in sorted order are returned, and metrics and params are limited separately
+    assert keys.metric_keys == ("eval/ds00/loss", "eval/ds01/loss", "eval/ds02/loss")
+    assert keys.metric_keys_truncated is True
+    assert keys.param_keys == ("Loss_weight", "param_0", "param_1")
+    assert keys.param_keys_truncated is True
+
+
+def test_get_run_data_keys_max_results_equal_to_matches_is_not_truncated(
+    store: SqlAlchemyStore,
+):
+    exp = _create_experiments(store, "test_get_run_data_keys_max_results_exact")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], search="param_", max_results=5)
+
+    assert len(keys.param_keys) == 5
+    assert keys.param_keys_truncated is False
+    assert keys.metric_keys == ()
+    assert keys.metric_keys_truncated is False
+
+
+def test_get_run_data_keys_can_be_used_as_data_projection(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_get_run_data_keys_as_projection")
+    _log_projection_test_runs(store, exp)
+
+    keys = store.get_run_data_keys([exp])
+    runs = store.search_runs(
+        [exp],
+        None,
+        ViewType.ALL,
+        data_projection=RunDataProjection(metric_keys=keys.metric_keys, param_keys=keys.param_keys),
+    )
+
+    assert all(set(r.data.metrics) == set(keys.metric_keys) for r in runs)
+    assert all(set(r.data.params) == set(keys.param_keys) for r in runs)
+
+
+def test_search_runs_data_projection(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection")
+    run_ids = _log_projection_test_runs(store, exp)
+
+    runs = store.search_runs(
+        [exp],
+        None,
+        ViewType.ALL,
+        data_projection=RunDataProjection(metric_keys=["m1", "m3"], param_keys=["p2"]),
+    )
+
+    assert [r.info.run_id for r in runs] == run_ids[::-1]
+    for run in runs:
+        i = run_ids.index(run.info.run_id)
+        assert run.data.metrics == {"m1": float(i), "m3": float(i) * 100}
+        assert run.data.params == {"p2": f"b{i}"}
+        assert run.data.tags["t1"] == f"x{i}"
+
+
+def test_search_runs_data_projection_empty_returns_no_metrics_or_params(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection_empty")
+    run_ids = _log_projection_test_runs(store, exp)
+
+    runs = store.search_runs([exp], None, ViewType.ALL, data_projection=RunDataProjection())
+
+    assert len(runs) == len(run_ids)
+    for run in runs:
+        assert run.data.metrics == {}
+        assert run.data.params == {}
+        assert run.data.tags["t1"].startswith("x")
+
+
+def test_search_runs_without_data_projection_returns_all_data(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_without_data_projection")
+    _log_projection_test_runs(store, exp)
+
+    runs = store.search_runs([exp], None, ViewType.ALL)
+
+    for run in runs:
+        assert set(run.data.metrics) == {"m1", "m2", "m3"}
+        assert set(run.data.params) == {"p1", "p2"}
+
+
+def test_search_runs_data_projection_does_not_affect_filter_and_order_by(
+    store: SqlAlchemyStore,
+):
+    exp = _create_experiments(store, "test_search_runs_data_projection_filter_order")
+    run_ids = _log_projection_test_runs(store, exp)
+
+    # Neither the filtered nor the ordered metric/param is part of the projection.
+    runs = store.search_runs(
+        [exp],
+        "metrics.m2 >= 10 and params.p1 != 'a2'",
+        ViewType.ALL,
+        order_by=["metrics.m3 DESC"],
+        data_projection=RunDataProjection(metric_keys=["m1"]),
+    )
+
+    assert [r.info.run_id for r in runs] == [run_ids[1]]
+    assert runs[0].data.metrics == {"m1": 1.0}
+    assert runs[0].data.params == {}
+
+
+def test_search_runs_data_projection_with_pagination(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection_pagination")
+    run_ids = _log_projection_test_runs(store, exp)
+    projection = RunDataProjection(metric_keys=["m2"])
+
+    page1 = store.search_runs([exp], None, ViewType.ALL, max_results=2, data_projection=projection)
+    page2 = store.search_runs(
+        [exp],
+        None,
+        ViewType.ALL,
+        max_results=2,
+        page_token=page1.token,
+        data_projection=projection,
+    )
+
+    assert [r.info.run_id for r in page1] + [r.info.run_id for r in page2] == run_ids[::-1]
+    assert page1.token is not None
+    assert page2.token is None
+    assert all(set(r.data.metrics) == {"m2"} for r in [*page1, *page2])
+
+
+def test_search_runs_data_projection_only_queries_projected_keys(store: SqlAlchemyStore):
+    exp = _create_experiments(store, "test_search_runs_data_projection_queries")
+    _log_projection_test_runs(store, exp)
+
+    from sqlalchemy import event
+
+    captured = []
+
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        captured.append(statement)
+
+    event.listen(store.engine, "before_cursor_execute", _capture)
+    try:
+        store.search_runs(
+            [exp],
+            None,
+            ViewType.ALL,
+            data_projection=RunDataProjection(metric_keys=["m1"], param_keys=[]),
+        )
+    finally:
+        event.remove(store.engine, "before_cursor_execute", _capture)
+
+    metric_queries = [s for s in captured if "FROM latest_metrics" in s]
+    assert len(metric_queries) == 1
+    # Besides the run ids, the loaded metrics are restricted to the projected key.
+    assert len(re.findall(r"\bIN \(", metric_queries[0])) == 2
+    # No keys requested for params, so the params table is not queried at all.
+    assert not [s for s in captured if "FROM params" in s]
 
 
 def test_search_runs_run_name(store: SqlAlchemyStore):

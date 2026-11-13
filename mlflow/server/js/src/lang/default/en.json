@@ -2015,6 +2015,10 @@
     "defaultMessage": "Contour chart",
     "description": "Experiment tracking > runs charts > add chart menu > contour chart"
   },
+  "6Z75D8": {
+    "defaultMessage": "Showing the first {maxResults} matching metrics and parameters. Type in the search box to find the others.",
+    "description": "Hint below the list of columns in the experiment runs table column selector, displayed when the experiment logs more metrics or parameters than are listed"
+  },
   "6ZhLfu": {
     "defaultMessage": "Visibility",
     "description": "Label for the visibility icon column in the evaluation runs table"
@@ -2338,6 +2342,10 @@
   "7jsqqe": {
     "defaultMessage": "{timeSince, plural, =1 {1 minute} other {# minutes}} ago",
     "description": "Text for time in minutes since given date for MLflow views"
+  },
+  "7kH5Fs": {
+    "defaultMessage": "Load all metrics and parameters of the selected runs",
+    "description": "Tooltip of the button that loads the full metric and param data of selected runs"
   },
   "7kUi8J": {
     "defaultMessage": "Duration:",
@@ -3086,6 +3094,10 @@
   "AQh8lf": {
     "defaultMessage": "Model",
     "description": "Dimension toggle option for model"
+  },
+  "AUJ7eA": {
+    "defaultMessage": "Load full data",
+    "description": "Label of the button above the experiment runs table that loads all metrics and params of the selected runs"
   },
   "AVeqtn": {
     "defaultMessage": "Enter default artifact root URI",
@@ -5890,6 +5902,10 @@
   "ML7TiJ": {
     "defaultMessage": "Could not save your review: {error}",
     "description": "Review focused view: error toast when saving a review fails"
+  },
+  "MM4n4N": {
+    "defaultMessage": "Show {count} more ({remaining} remaining)",
+    "description": "Run page > Overview > Metrics and parameters tables > Button that reveals more rows when the table is truncated"
   },
   "MNCAQh": {
     "defaultMessage": "Calls",
@@ -9499,6 +9515,10 @@
     "defaultMessage": "(empty)",
     "description": "Experiment page > artifact compare view > results table > no result (empty cell)"
   },
+  "aQzdwd": {
+    "defaultMessage": "Charts are generated automatically for {limit} of {total} metrics. To chart another metric, use the search above to check whether it is already charted, or choose Add chart in a section and select the metric.",
+    "description": "Experiment tracking > runs charts > notice shown when there are more metrics than the automatically generated charts"
+  },
   "aS7m1u": {
     "defaultMessage": "Learn more",
     "description": "Link text to learn more about evaluation datasets"
@@ -11386,6 +11406,10 @@
   "hPDXO7": {
     "defaultMessage": "Add tracing to your application",
     "description": "Step 2 title for traces onboarding"
+  },
+  "hPW29A": {
+    "defaultMessage": "Select runs in the table to load all of their metrics and parameters",
+    "description": "Tooltip of the disabled button that loads the full data of runs when no run is selected"
   },
   "hR27A2": {
     "defaultMessage": "View full dashboard",

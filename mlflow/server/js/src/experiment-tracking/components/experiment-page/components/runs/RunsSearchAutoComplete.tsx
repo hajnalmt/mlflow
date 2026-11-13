@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { ErrorWrapper } from '../../../../../common/utils/ErrorWrapper';
 import { EntitySearchAutoComplete } from '../../../EntitySearchAutoComplete';
 import type { ExperimentRunsSelectorResult } from '../../utils/experimentRuns.selector';
@@ -12,6 +12,8 @@ import {
   getEntitySearchOptionsFromEntityNames,
 } from '../../../EntitySearchAutoComplete.utils';
 import { shouldUseRegexpBasedAutoRunsSearchFilter } from '../../../../../common/utils/FeatureUtils';
+import { useExperimentIds } from '../../hooks/useExperimentIds';
+import { useExperimentRunDataKeys } from '../../hooks/useExperimentRunDataKeys';
 
 // A default placeholder for the search box
 const SEARCH_BOX_PLACEHOLDER = 'metrics.rmse < 1 and params.model = "tree"';
@@ -36,6 +38,12 @@ const ATTRIBUTE_OPTIONS = [
   'created',
 ].map((s) => ({ value: `attributes.${s}` }));
 
+// Maximum number of metric and param names looked up on the server for the typed text
+const SERVER_SUGGESTIONS_MAX_RESULTS = 100;
+
+// Matches the table name that prefixes the typed entity name, e.g. "metrics." in "metrics.rm"
+const ENTITY_TABLE_PREFIX_REGEXP = /^(metrics?|params?|parameters?|tags?|attributes?|attr|run)\./i;
+
 const mergeDeduplicate = (list1: string[], list2: string[]) => [...new Set([...list1, ...list2])];
 const getTagNames = (tagsList: any[]) => tagsList.flatMap((tagRecord) => Object.keys(tagRecord));
 
@@ -57,18 +65,37 @@ const getEntityNamesFromRunsData = (
 };
 
 export const RunsSearchAutoComplete = ({ runsData, ...restProps }: RunsSearchAutoCompleteProps) => {
+  const experimentIds = useExperimentIds();
   const existingEntityNamesRef = useRef<EntitySearchAutoCompleteEntityNameGroup>({
     metricNames: [],
     paramNames: [],
     tagNames: [],
   });
 
+  // The runs only hold the metrics and params of the displayed columns, so the names that match the typed
+  // text are looked up on the server.
+  const [editedEntityName, setEditedEntityName] = useState('');
+  const { metricKeys: serverMetricNames, paramKeys: serverParamNames } = useExperimentRunDataKeys({
+    experimentIds,
+    search: editedEntityName.replace(ENTITY_TABLE_PREFIX_REGEXP, ''),
+    maxResults: SERVER_SUGGESTIONS_MAX_RESULTS,
+    enabled: editedEntityName.length > 0,
+  });
+
   const baseOptions = useMemo<EntitySearchAutoCompleteOptionGroup[]>(() => {
     const existingEntityNames = existingEntityNamesRef.current;
     const mergedEntityNames = getEntityNamesFromRunsData(runsData, existingEntityNames);
     existingEntityNamesRef.current = mergedEntityNames;
-    return getEntitySearchOptionsFromEntityNames(mergedEntityNames, ATTRIBUTE_OPTIONS);
-  }, [runsData]);
+    return getEntitySearchOptionsFromEntityNames(
+      {
+        ...mergedEntityNames,
+        // Names found by the server are not remembered, they are specific to the typed text
+        metricNames: mergeDeduplicate(mergedEntityNames.metricNames, serverMetricNames),
+        paramNames: mergeDeduplicate(mergedEntityNames.paramNames, serverParamNames),
+      },
+      ATTRIBUTE_OPTIONS,
+    );
+  }, [runsData, serverMetricNames, serverParamNames]);
 
   return (
     <EntitySearchAutoComplete
@@ -77,6 +104,7 @@ export const RunsSearchAutoComplete = ({ runsData, ...restProps }: RunsSearchAut
       tooltipContent={<RunsSearchTooltipContent />}
       placeholder={SEARCH_BOX_PLACEHOLDER}
       useQuickFilter={shouldUseRegexpBasedAutoRunsSearchFilter()}
+      onEditedEntityNameChange={setEditedEntityName}
     />
   );
 };

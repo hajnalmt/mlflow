@@ -71,6 +71,7 @@ from mlflow.entities.logged_model_tag import LoggedModelTag
 from mlflow.entities.model_registry import ModelVersionTag, RegisteredModelTag
 from mlflow.entities.model_registry.prompt_version import IS_PROMPT_TAG_KEY
 from mlflow.entities.multipart_upload import MultipartUploadPart
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_info import TraceInfo
 from mlflow.entities.trace_info_v2 import TraceInfoV2
 from mlflow.entities.trace_metrics import MetricAggregation, MetricViewType
@@ -236,6 +237,7 @@ from mlflow.protos.service_pb2 import (
     GetDatasetRecords,
     GetExperiment,
     GetExperimentByName,
+    GetExperimentRunDataKeys,
     GetGatewayBudgetPolicy,
     GetGatewayEndpoint,
     GetGatewayGuardrail,
@@ -2089,6 +2091,10 @@ def _search_runs():
     return response
 
 
+# Maximum number of metric keys and of param keys in the data projection of a search runs request
+MAX_DATA_PROJECTION_KEYS = 1000
+
+
 def search_runs_impl(request_message):
     response_message = SearchRuns.Response()
     run_view_type = ViewType.ACTIVE_ONLY
@@ -2109,6 +2115,21 @@ def search_runs_impl(request_message):
         pass
 
     order_by = request_message.order_by
+    # Only forward a projection when the request has one: not every store supports projections.
+    projection_kwargs = {}
+    if request_message.HasField("data_projection"):
+        data_projection = request_message.data_projection
+        for field_name in ("metric_keys", "param_keys"):
+            if len(getattr(data_projection, field_name)) > MAX_DATA_PROJECTION_KEYS:
+                raise MlflowException(
+                    message=(
+                        f"Invalid value for request parameter data_projection. "
+                        f"{field_name} must contain at most {MAX_DATA_PROJECTION_KEYS} keys, "
+                        f"but got {len(getattr(data_projection, field_name))}."
+                    ),
+                    error_code=INVALID_PARAMETER_VALUE,
+                )
+        projection_kwargs["data_projection"] = RunDataProjection.from_proto(data_projection)
     run_entities = _get_tracking_store().search_runs(
         experiment_ids=experiment_ids,
         filter_string=filter_string,
@@ -2116,6 +2137,7 @@ def search_runs_impl(request_message):
         max_results=max_results,
         order_by=order_by,
         page_token=request_message.page_token or None,
+        **projection_kwargs,
     )
     response_message.runs.extend([r.to_proto() for r in run_entities])
     if run_entities.token:
@@ -2386,6 +2408,65 @@ def get_metric_history_bulk_interval_impl(request_message):
 
     response_message = GetMetricHistoryBulkInterval.Response()
     response_message.metrics.extend([m.to_proto() for m in metrics_with_run_ids])
+    return response_message
+
+
+MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST = 20
+MAX_RUN_DATA_KEYS_RESULTS = 10000
+
+
+@catch_mlflow_exception
+@_disable_if_artifacts_only
+def _get_experiment_run_data_keys():
+    request_message = _get_request_message(
+        GetExperimentRunDataKeys(),
+        schema={"experiment_ids": [_assert_required, _assert_array, _assert_item_type_string]},
+    )
+    response_message = get_experiment_run_data_keys_impl(request_message)
+    response = Response(mimetype="application/json")
+    response.set_data(message_to_json(response_message))
+    return response
+
+
+def get_experiment_run_data_keys_impl(request_message):
+    experiment_ids = list(request_message.experiment_ids)
+    if not experiment_ids:
+        raise MlflowException(
+            message="GetExperimentRunDataKeys request must specify at least one experiment_id.",
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+    if len(experiment_ids) > MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST:
+        raise MlflowException(
+            message=(
+                "GetExperimentRunDataKeys request cannot specify more than "
+                f"{MAX_EXPERIMENT_IDS_PER_RUN_DATA_KEYS_REQUEST} experiment_ids. "
+                f"Received {len(experiment_ids)} experiment_ids."
+            ),
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+
+    run_view_type = ViewType.ACTIVE_ONLY
+    if request_message.HasField("run_view_type"):
+        run_view_type = ViewType.from_proto(request_message.run_view_type)
+
+    max_results = request_message.max_results
+    if not 1 <= max_results <= MAX_RUN_DATA_KEYS_RESULTS:
+        raise MlflowException(
+            message=(
+                f"Invalid value for request parameter max_results. It must be between 1 and "
+                f"{MAX_RUN_DATA_KEYS_RESULTS}, but got value {max_results}."
+            ),
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+
+    run_data_keys = _get_tracking_store().get_run_data_keys(
+        experiment_ids=experiment_ids,
+        run_view_type=run_view_type,
+        search=request_message.search or None,
+        max_results=max_results,
+    )
+    response_message = GetExperimentRunDataKeys.Response()
+    response_message.MergeFrom(run_data_keys.to_proto())
     return response_message
 
 
@@ -8143,6 +8224,7 @@ HANDLERS = {
     LogModel: _log_model,
     GetRun: _get_run,
     SearchRuns: _search_runs,
+    GetExperimentRunDataKeys: _get_experiment_run_data_keys,
     ListArtifacts: _list_artifacts,
     CreatePresignedUploadUrl: _create_presigned_upload_url,
     CreatePresignedDownloadUrl: _create_presigned_download_url,

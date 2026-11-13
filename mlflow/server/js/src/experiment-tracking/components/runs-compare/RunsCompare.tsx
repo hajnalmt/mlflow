@@ -50,6 +50,7 @@ import { useGetExperimentRunColor } from '../experiment-page/hooks/useExperiment
 import { RunsChartsGlobalChartSettingsDropdown } from '../runs-charts/components/RunsChartsGlobalChartSettingsDropdown';
 import { RunsChartsDraggableCardsGridContextProvider } from '../runs-charts/components/RunsChartsDraggableCardsGridContext';
 import { RunsChartsFilterInput } from '../runs-charts/components/RunsChartsFilterInput';
+import { RunsChartsMetricLimitNotice } from '../runs-charts/components/RunsChartsMetricLimitNotice';
 import { RUNS_CHARTS_UI_Z_INDEX } from '../runs-charts/utils/runsCharts.const';
 
 export interface RunsCompareProps {
@@ -409,6 +410,7 @@ const RunsCompareImpl = ({
           globalLineChartConfig={globalLineChartConfig}
         />
       </div>
+      <RunsChartsMetricLimitNotice metricsCount={metricKeyList.length} />
       <RunsChartsTooltipWrapper contextData={tooltipContextValue} component={RunsChartsTooltipBody}>
         <RunsChartsDraggableCardsGridContextProvider visibleChartCards={visibleChartCards}>
           <RunsChartsSectionAccordion

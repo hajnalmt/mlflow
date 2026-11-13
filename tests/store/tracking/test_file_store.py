@@ -41,6 +41,7 @@ from mlflow.entities import (
     _DatasetSummary,
 )
 from mlflow.entities.assessment import ExpectationValue, FeedbackValue
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_status import TraceStatus
 from mlflow.exceptions import MissingConfigException, MlflowException
 from mlflow.models import Model
@@ -1418,6 +1419,91 @@ def test_search_runs_pagination(store):
     result = store.search_runs([exp], None, ViewType.ALL, max_results=4, page_token=result.token)
     assert [r.info.run_id for r in result] == runs[8:]
     assert result.token is None
+
+
+def test_get_run_data_keys(store):
+    exp1 = store.create_experiment("test_get_run_data_keys_1")
+    exp2 = store.create_experiment("test_get_run_data_keys_2")
+    run1 = store.create_run(exp1, "user", 1000, [], "name").info.run_id
+    run2 = store.create_run(exp1, "user", 1000, [], "name").info.run_id
+    other = store.create_run(exp2, "user", 1000, [], "name").info.run_id
+    store.log_batch(
+        run1,
+        metrics=[Metric("m1", 1.0, 1, 0), Metric("m1", 2.0, 2, 1), Metric("nested/m", 1.0, 1, 0)],
+        params=[Param("p1", "a")],
+        tags=[],
+    )
+    store.log_batch(run2, metrics=[Metric("m2", 1.0, 1, 0)], params=[Param("p2", "b")], tags=[])
+    store.log_batch(other, metrics=[Metric("other_m", 1.0, 1, 0)], params=[], tags=[])
+    store.delete_run(run2)
+
+    keys = store.get_run_data_keys([exp1])
+    assert keys.metric_keys == ("m1", "nested/m")
+    assert keys.param_keys == ("p1",)
+
+    keys = store.get_run_data_keys([exp1], ViewType.ALL)
+    assert keys.metric_keys == ("m1", "m2", "nested/m")
+    assert keys.param_keys == ("p1", "p2")
+
+    keys = store.get_run_data_keys([exp1, exp2], ViewType.ACTIVE_ONLY)
+    assert keys.metric_keys == ("m1", "nested/m", "other_m")
+
+
+def test_get_run_data_keys_search_and_max_results(store):
+    exp = store.create_experiment("test_get_run_data_keys_search")
+    run_id = store.create_run(exp, "user", 1000, [], "name").info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric(f"eval/m{i}", 1.0, 1, 0) for i in range(5)]
+        + [Metric("Train/LOSS", 1, 1, 0)],
+        params=[Param("lr", "1"), Param("loss_weight", "2")],
+        tags=[],
+    )
+
+    keys = store.get_run_data_keys([exp], search="loss")
+    assert keys.metric_keys == ("Train/LOSS",)
+    assert keys.param_keys == ("loss_weight",)
+
+    keys = store.get_run_data_keys([exp], max_results=2)
+    assert keys.metric_keys == ("Train/LOSS", "eval/m0")
+    assert keys.metric_keys_truncated is True
+    assert keys.param_keys == ("loss_weight", "lr")
+    assert keys.param_keys_truncated is False
+
+
+def test_search_runs_data_projection(store):
+    exp = store.create_experiment("test_search_runs_data_projection")
+    run_id = store.create_run(exp, "user", 1000, [], "name").info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[
+            Metric(key="m1", value=1.0, timestamp=1, step=0),
+            Metric(key="m2", value=2.0, timestamp=1, step=0),
+        ],
+        params=[Param("p1", "a"), Param("p2", "b")],
+        tags=[RunTag("t1", "x")],
+    )
+
+    # Filtering and sorting still work on metrics/params that are not part of the projection.
+    runs = store.search_runs(
+        [exp],
+        "metrics.m2 > 1 and params.p2 = 'b'",
+        ViewType.ALL,
+        order_by=["metrics.m2 DESC"],
+        data_projection=RunDataProjection(metric_keys=["m1"], param_keys=["p1"]),
+    )
+    assert [r.info.run_id for r in runs] == [run_id]
+    assert runs[0].data.metrics == {"m1": 1.0}
+    assert runs[0].data.params == {"p1": "a"}
+    assert runs[0].data.tags["t1"] == "x"
+
+    runs = store.search_runs([exp], None, ViewType.ALL, data_projection=RunDataProjection())
+    assert runs[0].data.metrics == {}
+    assert runs[0].data.params == {}
+
+    runs = store.search_runs([exp], None, ViewType.ALL)
+    assert set(runs[0].data.metrics) == {"m1", "m2"}
+    assert set(runs[0].data.params) == {"p1", "p2"}
 
 
 def test_search_runs_run_name(store):

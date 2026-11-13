@@ -61,6 +61,8 @@ export interface ExperimentViewRunsProps extends ExperimentViewRunsOwnProps {
   moreRunsAvailable: boolean;
   requestError: ErrorWrapper | Error | null;
   refreshRuns: () => void;
+  loadFullRunData?: (runUuids: string[]) => Promise<void>;
+  isLoadingFullRunData?: boolean;
 }
 
 /**
@@ -89,6 +91,8 @@ export const ExperimentViewRuns = React.memo((props: ExperimentViewRunsProps) =>
     moreRunsAvailable,
     requestError,
     refreshRuns,
+    loadFullRunData,
+    isLoadingFullRunData,
   } = props;
 
   const isComparingExperiments = experiments.length > 1;
@@ -303,6 +307,8 @@ export const ExperimentViewRuns = React.memo((props: ExperimentViewRunsProps) =>
           expandRows={expandRows}
           updateExpandRows={updateExpandRows}
           refreshRuns={refreshRuns}
+          loadFullRunData={loadFullRunData}
+          isLoadingFullRunData={isLoadingFullRunData}
           uiState={uiState}
           isLoading={isLoadingRuns}
           isComparingExperiments={isComparingExperiments}

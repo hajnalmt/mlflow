@@ -46,6 +46,8 @@ from mlflow.entities.model_registry import (
 from mlflow.entities.model_registry.prompt_version import IS_PROMPT_TAG_KEY, PROMPT_TEXT_TAG_KEY
 from mlflow.entities.presigned_download import PresignedDownloadUrlResponse
 from mlflow.entities.presigned_upload import CreatePresignedUploadResponse
+from mlflow.entities.run_data_keys import RunDataKeys
+from mlflow.entities.run_data_projection import RunDataProjection
 from mlflow.entities.trace_location import TraceLocation as EntityTraceLocation
 from mlflow.entities.trace_metrics import (
     AggregationType,
@@ -124,6 +126,7 @@ from mlflow.protos.service_pb2 import (
     DeleteTraceTag,
     DeleteTraceTagV3,
     GatewayEndpoint,
+    GetExperimentRunDataKeys,
     GetGatewayEndpoint,
     GetScorer,
     GetTrace,
@@ -193,6 +196,7 @@ from mlflow.server.handlers import (
     _get_dataset_experiment_ids_handler,
     _get_dataset_handler,
     _get_dataset_records_handler,
+    _get_experiment_run_data_keys,
     _get_gateway_endpoint,
     _get_issue,
     _get_latest_versions,
@@ -799,6 +803,166 @@ def test_search_runs_empty_page_token(mock_get_request_message, mock_tracking_st
     mock_tracking_store.search_runs.assert_called_once()
     call_kwargs = mock_tracking_store.search_runs.call_args.kwargs
     assert call_kwargs["page_token"] is None  # page_token should be None, not ""
+
+
+def test_search_runs_data_projection(mock_get_request_message, mock_tracking_store):
+    search_runs_proto = SearchRuns(
+        experiment_ids=["0"],
+        data_projection=SearchRuns.DataProjection(metric_keys=["m1"], param_keys=["p1", "p2"]),
+    )
+    mock_get_request_message.return_value = search_runs_proto
+    mock_tracking_store.search_runs.return_value = PagedList([], None)
+
+    _search_runs()
+
+    kwargs = mock_tracking_store.search_runs.call_args.kwargs
+    assert kwargs["data_projection"] == RunDataProjection(
+        metric_keys=["m1"], param_keys=["p1", "p2"]
+    )
+
+
+def test_search_runs_empty_data_projection_is_forwarded(
+    mock_get_request_message, mock_tracking_store
+):
+    search_runs_proto = SearchRuns(experiment_ids=["0"])
+    search_runs_proto.data_projection.SetInParent()
+    mock_get_request_message.return_value = search_runs_proto
+    mock_tracking_store.search_runs.return_value = PagedList([], None)
+
+    _search_runs()
+
+    # An empty projection means "no metrics and no params", which differs from no projection.
+    kwargs = mock_tracking_store.search_runs.call_args.kwargs
+    assert kwargs["data_projection"] == RunDataProjection()
+
+
+def test_search_runs_without_data_projection_does_not_pass_it_to_store(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = SearchRuns(experiment_ids=["0"])
+    mock_tracking_store.search_runs.return_value = PagedList([], None)
+
+    _search_runs()
+
+    # Stores without projection support must not receive the argument.
+    assert "data_projection" not in mock_tracking_store.search_runs.call_args.kwargs
+
+
+def test_get_experiment_run_data_keys(mock_get_request_message, mock_tracking_store):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0", "1"], run_view_type=ViewType.to_proto(ViewType.ALL)
+    )
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys(
+        metric_keys=["m2", "m1"], param_keys=["p1"]
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    mock_tracking_store.get_run_data_keys.assert_called_once_with(
+        experiment_ids=["0", "1"], run_view_type=ViewType.ALL, search=None, max_results=1000
+    )
+    assert json.loads(response.get_data()) == {
+        "metric_keys": ["m1", "m2"],
+        "param_keys": ["p1"],
+        "metric_keys_truncated": False,
+        "param_keys_truncated": False,
+    }
+
+
+def test_get_experiment_run_data_keys_defaults_to_active_runs(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(experiment_ids=["0"])
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys()
+
+    _get_experiment_run_data_keys()
+
+    kwargs = mock_tracking_store.get_run_data_keys.call_args.kwargs
+    assert kwargs["run_view_type"] == ViewType.ACTIVE_ONLY
+
+
+@pytest.mark.parametrize(
+    ("experiment_ids", "expected_message"),
+    [
+        ([], "must specify at least one experiment_id"),
+        ([str(i) for i in range(21)], "cannot specify more than 20 experiment_ids"),
+    ],
+)
+def test_get_experiment_run_data_keys_validates_experiment_ids(
+    mock_get_request_message, mock_tracking_store, experiment_ids, expected_message
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(experiment_ids=experiment_ids)
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 400
+    assert expected_message in json.loads(response.get_data())["message"]
+    mock_tracking_store.get_run_data_keys.assert_not_called()
+
+
+def test_get_experiment_run_data_keys_search_and_max_results(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], search="loss", max_results=50
+    )
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys(
+        metric_keys=["loss"], metric_keys_truncated=True
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    kwargs = mock_tracking_store.get_run_data_keys.call_args.kwargs
+    assert kwargs["search"] == "loss"
+    assert kwargs["max_results"] == 50
+    assert json.loads(response.get_data()) == {
+        "metric_keys": ["loss"],
+        "metric_keys_truncated": True,
+        "param_keys_truncated": False,
+    }
+
+
+@pytest.mark.parametrize("max_results", [0, -1, 10001])
+def test_get_experiment_run_data_keys_validates_max_results(
+    mock_get_request_message, mock_tracking_store, max_results
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], max_results=max_results
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 400
+    assert "max_results" in json.loads(response.get_data())["message"]
+    mock_tracking_store.get_run_data_keys.assert_not_called()
+
+
+def test_search_runs_data_projection_key_limit(mock_get_request_message, mock_tracking_store):
+    mock_get_request_message.return_value = SearchRuns(
+        experiment_ids=["0"],
+        data_projection=SearchRuns.DataProjection(
+            metric_keys=[f"m{i}" for i in range(1001)], param_keys=["p"]
+        ),
+    )
+
+    response = _search_runs()
+
+    assert response.status_code == 400
+    assert (
+        "metric_keys must contain at most 1000 keys" in json.loads(response.get_data())["message"]
+    )
+    mock_tracking_store.search_runs.assert_not_called()
+
+
+def test_get_experiment_run_data_keys_unsupported_store(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(experiment_ids=["0"])
+    mock_tracking_store.get_run_data_keys.side_effect = MlflowNotImplementedException("nope")
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 501
 
 
 def test_log_batch_api_req(mock_get_request_json):

@@ -1,9 +1,11 @@
-import { jest, describe, beforeAll, beforeEach, it, expect } from '@jest/globals';
+import { jest, describe, beforeAll, beforeEach, afterEach, it, expect } from '@jest/globals';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { IntlProvider } from 'react-intl';
 import { DesignSystemProvider } from '@databricks/design-system';
+import { QueryClient, QueryClientProvider } from '@databricks/web-shared/query-client';
+import { MlflowService } from '../../../../sdk/MlflowService';
 import { MemoryRouter, Routes, Route } from '../../../../../common/utils/RoutingUtils';
 import { ExperimentPageUIStateContextProvider } from '../../contexts/ExperimentPageUIStateContext';
 import { createExperimentPageUIState } from '../../models/ExperimentPageUIState';
@@ -30,9 +32,18 @@ const MOCK_RUNS_DATA = {
 
 describe('ExperimentViewRunsColumnSelector', () => {
   const onResetColumns = jest.fn();
+  let getRunDataKeysSpy: jest.SpiedFunction<typeof MlflowService.getExperimentRunDataKeys>;
+  let queryClient: QueryClient;
 
   beforeEach(() => {
+    queryClient = new QueryClient();
     onResetColumns.mockClear();
+    // By default, the server does not know any other keys than the ones of the loaded runs
+    getRunDataKeysSpy = jest.spyOn(MlflowService, 'getExperimentRunDataKeys').mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   const TestBed = ({ initialVisible = false }: { initialVisible?: boolean }) => {
@@ -64,7 +75,9 @@ describe('ExperimentViewRunsColumnSelector', () => {
               path="/experiments/:experimentId"
               element={
                 <DesignSystemProvider>
-                  <IntlProvider locale="en">{children}</IntlProvider>
+                  <IntlProvider locale="en">
+                    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+                  </IntlProvider>
                 </DesignSystemProvider>
               }
             />
@@ -151,6 +164,62 @@ describe('ExperimentViewRunsColumnSelector', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('column-selector-tree')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('keys that are logged on the runs but not loaded', () => {
+    it('lists the metrics and params that the server found next to the ones of the loaded runs', async () => {
+      getRunDataKeysSpy.mockResolvedValue({ metric_keys: ['eval/f1', 'loss'], param_keys: ['gamma'] });
+      renderComponent();
+      await userEvent.click(screen.getByTestId('column-selection-dropdown'));
+
+      const tree = await screen.findByTestId('column-selector-tree');
+
+      await waitFor(() => expect(tree.textContent).toContain('eval/f1'));
+      expect(tree.textContent).toContain('gamma');
+      // Loaded keys are still listed, and a key found by both is not duplicated
+      expect(tree.textContent).toContain('accuracy');
+      expect(within(tree).getAllByTitle('loss')).toHaveLength(1);
+      expect(getRunDataKeysSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ experiment_ids: ['123'], search: undefined }),
+      );
+    });
+
+    it('searches the keys on the server with the typed text', async () => {
+      renderComponent();
+      await userEvent.click(screen.getByTestId('column-selection-dropdown'));
+      await screen.findByTestId('column-selector-tree');
+
+      getRunDataKeysSpy.mockResolvedValue({ metric_keys: ['eval/ds1/f1'] });
+      await userEvent.type(screen.getByPlaceholderText('Search columns'), 'ds1');
+
+      await waitFor(() =>
+        expect(getRunDataKeysSpy).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'ds1' })),
+      );
+      await waitFor(() => expect(screen.getByTestId('column-selector-tree').textContent).toContain('eval/ds1/f1'));
+    });
+
+    it('tells that only the first keys are listed when the server truncated them', async () => {
+      getRunDataKeysSpy.mockResolvedValue({ metric_keys: ['a', 'b'], metric_keys_truncated: true });
+      renderComponent();
+      await userEvent.click(screen.getByTestId('column-selection-dropdown'));
+
+      expect(await screen.findByTestId('column-selector-truncated-hint')).toBeInTheDocument();
+      expect(screen.getByTestId('column-selector-tree').textContent).toContain('Metrics (4+)');
+    });
+
+    it('does not show the truncation hint when all keys are listed', async () => {
+      renderComponent();
+      await userEvent.click(screen.getByTestId('column-selection-dropdown'));
+
+      await screen.findByTestId('column-selector-tree');
+      expect(screen.queryByTestId('column-selector-truncated-hint')).not.toBeInTheDocument();
+    });
+
+    it('does not look up the keys while the panel is closed', () => {
+      renderComponent();
+
+      expect(getRunDataKeysSpy).not.toHaveBeenCalled();
     });
   });
 });

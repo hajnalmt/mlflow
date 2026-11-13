@@ -6,6 +6,7 @@ import type { ExperimentRunsSelectorResult } from '../utils/experimentRuns.selec
 import { RUNS_AUTO_REFRESH_INTERVAL, createSearchRunsParams } from '../utils/experimentPage.fetch-utils';
 import type { FetchRunsHookFunction, FetchRunsHookParams } from './useExperimentRuns';
 import type { SearchRunsApiResponse } from '../../../types';
+import type { RunsDataProjection } from '../utils/experimentPage.data-projection';
 
 /**
  * Enables auto-refreshing runs on the experiment page.
@@ -21,6 +22,7 @@ export const useExperimentRunsAutoRefresh = ({
   cachedPinnedRuns,
   runsData,
   isLoadingRuns,
+  dataProjection,
 }: {
   cachedPinnedRuns: React.MutableRefObject<string[]>;
   lastFetchedTime: React.MutableRefObject<number | null>;
@@ -30,6 +32,7 @@ export const useExperimentRunsAutoRefresh = ({
   searchFacets: ExperimentQueryParamsSearchFacets | null;
   runsData: ExperimentRunsSelectorResult;
   isLoadingRuns: boolean;
+  dataProjection?: RunsDataProjection;
 }) => {
   const refreshTimeoutRef = useRef<number | undefined>(undefined);
 
@@ -66,6 +69,9 @@ export const useExperimentRunsAutoRefresh = ({
             experimentIds,
             { ...searchFacets, runsPinned: cachedPinnedRuns.current },
             Date.now(),
+            undefined,
+            undefined,
+            dataProjection,
           ),
           requestedFacets: searchFacets,
           maxResults: requestedRunsCount,
@@ -130,5 +136,14 @@ export const useExperimentRunsAutoRefresh = ({
     return () => {
       clearTimeout(refreshTimeoutRef.current);
     };
-  }, [experimentIds, fetchRuns, searchFacets, enabled, cachedPinnedRuns, lastFetchedTime, isLoadingRuns]);
+  }, [
+    experimentIds,
+    fetchRuns,
+    searchFacets,
+    enabled,
+    cachedPinnedRuns,
+    lastFetchedTime,
+    isLoadingRuns,
+    dataProjection,
+  ]);
 };

@@ -42,6 +42,13 @@ export type SerializedRunsChartsCardConfigCard = RunsChartsCardConfig;
 
 // A function to iterate across run/group data traces and determine if any metric has multiple epochs.
 // This helps to decide if we should seed the line chart or a bar chart.
+/**
+ * Maximum number of metric charts that are generated automatically. Runs can log thousands of
+ * distinct metrics, and creating a chart card (and a section) for each of them freezes the page and
+ * overflows the persisted UI state. Other metrics can still be charted using the chart configuration.
+ */
+export const MAX_AUTO_GENERATED_METRIC_CHARTS = 100;
+
 const dataTraceMetricsContainMultipleEpochs = (dataTrace: RunsChartsRunData, metricKey: string): boolean =>
   Boolean(dataTrace.metrics?.[metricKey]?.step >= MIN_NUMBER_OF_STEP_FOR_LINE_COMPARISON);
 
@@ -206,8 +213,21 @@ export abstract class RunsChartsCardConfig {
 
     const imagesToRender = uniq(runsData.flatMap((run) => Object.keys(run.images)));
 
-    // Adding other metrics to render
-    for (const metricsKey of allMetricKeys) {
+    // Adding other metrics to render, in alphabetical order after the primary metric. Only the first
+    // ones are charted when there are too many.
+    // Node-level system metrics are charted as combined charts, so they don't take a place here.
+    const otherMetricKeys = allMetricKeys.filter(
+      (key) =>
+        key !== primaryMetricKey &&
+        !(nodeLevelMetricsConfig?.enabled && key.startsWith(`${MLFLOW_SYSTEM_METRIC_PREFIX}node_`)),
+    );
+    if (metricsToRender.size + otherMetricKeys.length > MAX_AUTO_GENERATED_METRIC_CHARTS) {
+      otherMetricKeys.sort();
+    }
+    for (const metricsKey of otherMetricKeys) {
+      if (metricsToRender.size >= MAX_AUTO_GENERATED_METRIC_CHARTS) {
+        break;
+      }
       metricsToRender.add(metricsKey);
     }
 
@@ -494,20 +514,41 @@ export abstract class RunsChartsCardConfig {
       }
     });
 
+    // Split the metrics to the ones that already have a chart and the new ones. The number of
+    // generated metric charts is limited, so only some of the new metrics get a chart.
+    const existingMetricKeys = new Set<string>();
+    let generatedMetricChartsCount = 0;
+    resultChartSet.forEach((chart) => {
+      const chartMetricKey = (chart as RunsChartsBarCardConfig).metricKey;
+      if (chartMetricKey) {
+        existingMetricKeys.add(chartMetricKey);
+        if (chart.isGenerated) {
+          generatedMetricChartsCount++;
+        }
+      }
+    });
+    const metricKeysWithChart: string[] = [];
+    let metricKeysWithoutChart: string[] = [];
+    metricsToRender.forEach((metricKey) =>
+      (existingMetricKeys.has(metricKey) ? metricKeysWithChart : metricKeysWithoutChart).push(metricKey),
+    );
+    const newChartsBudget = Math.max(0, MAX_AUTO_GENERATED_METRIC_CHARTS - generatedMetricChartsCount);
+    if (metricKeysWithoutChart.length > newChartsBudget) {
+      metricKeysWithoutChart = metricKeysWithoutChart.sort().slice(0, newChartsBudget);
+    }
+
     // Append new charts at the end instead of alphabetically
-    metricsToRender.forEach((metricKey) => {
+    [...metricKeysWithChart, ...metricKeysWithoutChart].forEach((metricKey) => {
       // Check if metricKey exists in the current chart set
-      const doesMetricKeyExist =
-        resultChartSet.findIndex((chart) => {
-          const chartMetricKey = (chart as RunsChartsBarCardConfig).metricKey;
-          return chartMetricKey ? chartMetricKey === metricKey : false;
-        }) >= 0;
+      const doesMetricKeyExist = existingMetricKeys.has(metricKey);
 
       // Check if there is a generated chart with metricKey
-      const generatedChartIndex = resultChartSet.findIndex((chart) => {
-        const chartMetricKey = (chart as RunsChartsBarCardConfig).metricKey;
-        return chartMetricKey && chartMetricKey === metricKey && chart.isGenerated;
-      });
+      const generatedChartIndex = doesMetricKeyExist
+        ? resultChartSet.findIndex((chart) => {
+            const chartMetricKey = (chart as RunsChartsBarCardConfig).metricKey;
+            return chartMetricKey && chartMetricKey === metricKey && chart.isGenerated;
+          })
+        : -1;
 
       // If the metric has multiple epochs, add a line chart. Otherwise, add a bar chart
       const anyRunHasMultipleEpochs = runsData.some((dataTrace) =>
