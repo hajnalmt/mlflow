@@ -39,7 +39,7 @@ export const buildWorkflowTypeQueryString = (
 
 const WORKFLOW_TYPE_STORAGE_KEY = 'mlflow.workflowType';
 const WORKFLOW_TYPE_STORAGE_VERSION = 1;
-const DEFAULT_WORKFLOW_TYPE = WorkflowType.GENAI;
+const DEFAULT_WORKFLOW_TYPE = WorkflowType.MACHINE_LEARNING;
 
 interface WorkflowTypeContextType {
   workflowType: WorkflowType;
