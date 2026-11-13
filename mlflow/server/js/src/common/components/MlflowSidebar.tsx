@@ -84,8 +84,11 @@ type MenuItemWithNested = {
   nestedItems?: React.ReactNode;
 };
 
+// Aumovio: GenAI sidebar entries (Prompts, MCP registry, AI gateway) are only shown when the
+// workflow-based navigation is enabled and the GenAI workflow is selected. With the flag off
+// (our default) the sidebar is the classic model training layout.
 const shouldShowGenAIFeatures = (enableWorkflowBasedNavigation: boolean, workflowType: WorkflowType) =>
-  !enableWorkflowBasedNavigation || (enableWorkflowBasedNavigation && workflowType === WorkflowType.GENAI);
+  enableWorkflowBasedNavigation && workflowType === WorkflowType.GENAI;
 
 export function MlflowSidebar({
   showSidebar,
