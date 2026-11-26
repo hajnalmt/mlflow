@@ -1191,6 +1191,30 @@ def test_order_by_attributes(store: SqlAlchemyStore):
     ) == ["234", "None", "456", "-123", "789", "123"]
 
 
+def test_order_by_duration(store: SqlAlchemyStore):
+    experiment_id = store.create_experiment("order_by_duration")
+    for name, start_time, end_time in [("long", 0, 100), ("running", 5, None), ("short", 10, 20)]:
+        run_id = store.create_run(
+            experiment_id, user_id="MrDuck", start_time=start_time, tags=[], run_name=name
+        ).info.run_id
+        if end_time is not None:
+            store.update_run_info(
+                run_id, run_status=RunStatus.FINISHED, end_time=end_time, run_name=None
+            )
+
+    # Unfinished runs have no duration and come last in both directions
+    assert _get_ordered_runs(store, ["attribute.duration asc"], experiment_id) == [
+        "short",
+        "long",
+        "running",
+    ]
+    assert _get_ordered_runs(store, ["attribute.duration desc"], experiment_id) == [
+        "long",
+        "short",
+        "running",
+    ]
+
+
 def test_search_vanilla(store: SqlAlchemyStore):
     exp = _create_experiments(store, "search_vanilla")
     runs = [_run_factory(store, _get_run_configs(exp)).info.run_id for r in range(3)]

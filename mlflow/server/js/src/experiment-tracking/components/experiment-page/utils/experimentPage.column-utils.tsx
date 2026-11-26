@@ -360,7 +360,15 @@ export const useRunsColumnDefinitions = ({
     // Duration column
     columns.push({
       headerName: ATTRIBUTE_COLUMN_LABELS.DURATION,
+      headerTooltip: ATTRIBUTE_COLUMN_SORT_KEY.DURATION,
       field: 'duration',
+      sortable: true,
+      headerComponentParams: {
+        canonicalSortKey: ATTRIBUTE_COLUMN_SORT_KEY.DURATION,
+      },
+      cellClassRules: {
+        'is-ordered-by': cellClassIsOrderedBy,
+      },
       initialWidth: 80,
     });
 

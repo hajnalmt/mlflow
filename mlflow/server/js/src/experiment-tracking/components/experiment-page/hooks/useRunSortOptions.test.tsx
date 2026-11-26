@@ -20,6 +20,16 @@ describe('useRunSortOptions', () => {
         order: 'DESCENDING',
       },
       {
+        label: ATTRIBUTE_COLUMN_SORT_LABEL.DURATION,
+        value: 'attributes.duration***ASCENDING',
+        order: 'ASCENDING',
+      },
+      {
+        label: ATTRIBUTE_COLUMN_SORT_LABEL.DURATION,
+        value: 'attributes.duration***DESCENDING',
+        order: 'DESCENDING',
+      },
+      {
         label: ATTRIBUTE_COLUMN_SORT_LABEL.USER,
         value: 'tags.`mlflow.user`***ASCENDING',
         order: 'ASCENDING',
@@ -85,6 +95,16 @@ describe('useRunSortOptions', () => {
       {
         label: ATTRIBUTE_COLUMN_SORT_LABEL.DATE,
         value: 'attributes.start_time***DESCENDING',
+        order: 'DESCENDING',
+      },
+      {
+        label: ATTRIBUTE_COLUMN_SORT_LABEL.DURATION,
+        value: 'attributes.duration***ASCENDING',
+        order: 'ASCENDING',
+      },
+      {
+        label: ATTRIBUTE_COLUMN_SORT_LABEL.DURATION,
+        value: 'attributes.duration***DESCENDING',
         order: 'DESCENDING',
       },
       {

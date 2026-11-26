@@ -604,6 +604,37 @@ def test_correct_sorting(order_bys, matching_runs):
     assert sorted_run_indices == matching_runs
 
 
+@pytest.mark.parametrize(
+    ("order_by", "expected"),
+    [
+        ("attributes.duration", ["short", "long", "running"]),
+        ("attributes.duration DESC", ["long", "short", "running"]),
+    ],
+)
+def test_sort_by_duration(order_by, expected):
+    runs = [
+        Run(
+            run_info=RunInfo(
+                run_id=run_id,
+                experiment_id=0,
+                user_id="user-id",
+                status=RunStatus.to_string(RunStatus.FINISHED),
+                start_time=start_time,
+                end_time=end_time,
+                lifecycle_stage=LifecycleStage.ACTIVE,
+            ),
+            run_data=RunData(),
+        )
+        for run_id, start_time, end_time in [
+            ("long", 0, 100),
+            ("running", 5, None),
+            ("short", 10, 20),
+        ]
+    ]
+
+    assert [run.info.run_id for run in SearchUtils.sort(runs, [order_by])] == expected
+
+
 def test_order_by_metric_with_nans_infs_nones():
     metric_vals_str = ["nan", "inf", "-inf", "-1000", "0", "1000", "None"]
     runs = [
