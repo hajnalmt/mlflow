@@ -193,8 +193,12 @@ class SearchUtils:
         + list(_ALTERNATE_NUMERIC_ATTRIBUTES)
         + list(_ALTERNATE_STRING_ATTRIBUTES)
     )
+    # Computed as end_time - start_time, so runs can be ordered by it but not filtered
+    DURATION_ATTRIBUTE = "duration"
     VALID_ORDER_BY_ATTRIBUTE_KEYS = set(
-        RunInfo.get_orderable_attributes() + list(_ALTERNATE_NUMERIC_ATTRIBUTES)
+        RunInfo.get_orderable_attributes()
+        + list(_ALTERNATE_NUMERIC_ATTRIBUTES)
+        + [DURATION_ATTRIBUTE]
     )
     _METRIC_IDENTIFIER = "metric"
     _ALTERNATE_METRIC_IDENTIFIERS = {"metrics"}
@@ -637,6 +641,10 @@ class SearchUtils:
         )
 
     @classmethod
+    def is_duration_attribute(cls, key_type, key_name):
+        return key_type == cls._ATTRIBUTE_IDENTIFIER and key_name == cls.DURATION_ATTRIBUTE
+
+    @classmethod
     def is_string_attribute(cls, key_type, key_name, comparator):
         if key_type == cls._ATTRIBUTE_IDENTIFIER and key_name not in cls.NUMERIC_ATTRIBUTES:
             if comparator not in cls.VALID_STRING_ATTRIBUTE_COMPARATORS:
@@ -863,6 +871,9 @@ class SearchUtils:
             sort_value = run.data.params.get(key)
         elif key_type == cls._TAG_IDENTIFIER:
             sort_value = run.data.tags.get(key)
+        elif cls.is_duration_attribute(key_type, key):
+            if run.info.end_time is not None:
+                sort_value = run.info.end_time - run.info.start_time
         elif key_type == cls._ATTRIBUTE_IDENTIFIER:
             sort_value = getattr(run.info, key)
         else:
