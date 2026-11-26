@@ -4663,6 +4663,10 @@ message GetExperimentRunDataKeys {
   // response is set. Defaults to 1000. Servers may support a threshold of at least 10000.
   optional int32 max_results = 4 [default = 1000];
 
+  // If true, ``search`` is a regular expression, and only keys that it matches anywhere
+  // (case-insensitive) are returned. Defaults to false.
+  optional bool search_is_regex = 5 [default = false];
+
   message Response {
     // Sorted, distinct keys of the (latest) metrics logged on the matching runs.
     repeated string metric_keys = 1;
