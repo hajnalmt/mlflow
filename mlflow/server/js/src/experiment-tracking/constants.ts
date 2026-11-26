@@ -23,6 +23,7 @@ export const ATTRIBUTE_COLUMN_LABELS = {
 
 export const ATTRIBUTE_COLUMN_SORT_LABEL = {
   DATE: 'Created',
+  DURATION: 'Duration',
   USER: 'User',
   RUN_NAME: 'Run Name',
   SOURCE: 'Source',
@@ -32,6 +33,7 @@ export const ATTRIBUTE_COLUMN_SORT_LABEL = {
 
 export const ATTRIBUTE_COLUMN_SORT_KEY = {
   DATE: 'attributes.start_time',
+  DURATION: 'attributes.duration',
   USER: 'tags.`mlflow.user`',
   RUN_NAME: 'tags.`mlflow.runName`',
   SOURCE: 'tags.`mlflow.source.name`',
