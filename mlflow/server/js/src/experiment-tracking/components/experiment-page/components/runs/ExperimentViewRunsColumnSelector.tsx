@@ -5,12 +5,14 @@ import {
   Input,
   Popover,
   SearchIcon,
+  ToggleButton,
+  Tooltip,
   Tree,
   useDesignSystemTheme,
 } from '@databricks/design-system';
 import { Theme } from '@emotion/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FormattedMessage } from 'react-intl';
+import { FormattedMessage, useIntl } from 'react-intl';
 import Utils from '../../../../../common/utils/Utils';
 import { ATTRIBUTE_COLUMN_LABELS, COLUMN_TYPES } from '../../../../constants';
 import { useUpdateExperimentViewUIState } from '../../contexts/ExperimentPageUIStateContext';
@@ -65,30 +67,63 @@ const getAttributeColumns = (isComparing: boolean) => {
 };
 
 /**
- * Function filters list of string by a given query string.
+ * Locates the filter query in a value and returns the position of the first match, if any.
  */
-const findMatching = (values: string[], filterQuery: string) =>
-  values.filter((v) => v.toLowerCase().includes(filterQuery.toLowerCase()));
+type KeyMatcher = (value: string) => { index: number; length: number } | undefined;
+
+const matchNothing: KeyMatcher = () => undefined;
 
 /**
- * Merges the sorted lists of keys without duplicates and returns the keys that match the filter query.
+ * Creates the matcher for a filter query: case-insensitive text, or with `useRegex` a case-insensitive regular
+ * expression matching anywhere in the value, like the search on the server. Returns `undefined` if the regular
+ * expression is invalid, e.g. while it's being typed.
+ */
+const createKeyMatcher = (filterQuery: string, useRegex: boolean): KeyMatcher | undefined => {
+  if (!useRegex) {
+    const query = filterQuery.toLowerCase();
+    return (value) => {
+      const index = value.toLowerCase().indexOf(query);
+      return index > -1 ? { index, length: query.length } : undefined;
+    };
+  }
+  let regex: RegExp;
+  try {
+    regex = new RegExp(filterQuery, 'i');
+  } catch {
+    return undefined;
+  }
+  return (value) => {
+    const match = regex.exec(value);
+    return match ? { index: match.index, length: match[0].length } : undefined;
+  };
+};
+
+/**
+ * Function filters list of string by a given matcher.
+ */
+const findMatching = (values: string[], matchKey: KeyMatcher) => values.filter((v) => matchKey(v));
+
+/**
+ * Merges the sorted lists of keys without duplicates and returns the keys that match.
  * Used to combine the keys that the server found with the ones from the loaded runs and the selected columns.
  */
-const mergeMatching = (filterQuery: string, ...keyLists: string[][]) =>
-  findMatching(Array.from(new Set(keyLists.flat())).sort(), filterQuery);
+const mergeMatching = (matchKey: KeyMatcher, ...keyLists: string[][]) =>
+  findMatching(Array.from(new Set(keyLists.flat())).sort(), matchKey);
 
 /**
  * Function dissects given string and wraps the
  * searched query with <strong>...</strong> if found. Used for highlighting search.
  */
-const createHighlightedNode = (value: string, filterQuery: string) => {
+const createHighlightedNode = (value: string, filterQuery: string, matchKey: KeyMatcher) => {
   if (!filterQuery) {
     return value;
   }
-  const index = value.toLowerCase().indexOf(filterQuery.toLowerCase());
+  const match = matchKey(value);
+  const index = match?.index ?? -1;
+  const length = match?.length ?? 0;
   const beforeStr = value.substring(0, index);
-  const matchStr = value.substring(index, index + filterQuery.length);
-  const afterStr = value.substring(index + filterQuery.length);
+  const matchStr = value.substring(index, index + length);
+  const afterStr = value.substring(index + length);
 
   return index > -1 ? (
     <span>
@@ -128,7 +163,13 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     const updateUIState = useUpdateExperimentViewUIState();
     const experimentIds = useExperimentIds();
     const [filter, setFilter] = useState('');
+    const [useRegex, setUseRegex] = useState(false);
     const { theme } = useDesignSystemTheme();
+    const { formatMessage } = useIntl();
+
+    // Undefined while the typed regular expression is invalid: nothing matches and the server is not asked
+    const validKeyMatcher = useMemo(() => createKeyMatcher(filter, useRegex), [filter, useRegex]);
+    const matchKey = validKeyMatcher ?? matchNothing;
 
     const searchInputRef = useRef<any>(null);
     const scrollableContainerRef = useRef<HTMLDivElement>(null);
@@ -161,8 +202,9 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     } = useExperimentRunDataKeys({
       experimentIds,
       search: filter,
+      searchIsRegex: useRegex,
       runViewType,
-      enabled: columnSelectorVisible,
+      enabled: columnSelectorVisible && Boolean(validKeyMatcher),
     });
 
     // Selected columns are always listed, so they can be unselected even if the search does not find them
@@ -183,12 +225,12 @@ export const ExperimentViewRunsColumnSelector = React.memo(
 
     // Keys that match the search: found by the server, loaded with the runs or selected
     const matchingMetricKeys = useMemo(
-      () => mergeMatching(filter, serverMetricKeys, runsData.metricKeyList, selectedMetricKeys),
-      [filter, serverMetricKeys, runsData.metricKeyList, selectedMetricKeys],
+      () => mergeMatching(matchKey, serverMetricKeys, runsData.metricKeyList, selectedMetricKeys),
+      [matchKey, serverMetricKeys, runsData.metricKeyList, selectedMetricKeys],
     );
     const matchingParamKeys = useMemo(
-      () => mergeMatching(filter, serverParamKeys, runsData.paramKeyList, selectedParamKeys),
-      [filter, serverParamKeys, runsData.paramKeyList, selectedParamKeys],
+      () => mergeMatching(matchKey, serverParamKeys, runsData.paramKeyList, selectedParamKeys),
+      [matchKey, serverParamKeys, runsData.paramKeyList, selectedParamKeys],
     );
 
     // Extract canonical key names for attributes, params, metrics and tags.
@@ -209,10 +251,10 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     const treeData = useMemo(() => {
       const result = [];
 
-      const filteredAttributes = findMatching(attributeColumnNames, filter);
+      const filteredAttributes = findMatching(attributeColumnNames, matchKey);
       const filteredParams = matchingParamKeys;
       const filteredMetrics = matchingMetricKeys;
-      const filteredTags = findMatching(tagsKeyList, filter);
+      const filteredTags = findMatching(tagsKeyList, matchKey);
 
       if (filteredAttributes.length) {
         result.push({
@@ -220,7 +262,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
           title: `Attributes`,
           children: filteredAttributes.map((attributeKey) => ({
             key: makeCanonicalSortKey(COLUMN_TYPES.ATTRIBUTES, attributeKey),
-            title: createHighlightedNode(attributeKey, filter),
+            title: createHighlightedNode(attributeKey, filter, matchKey),
           })),
         });
       }
@@ -232,7 +274,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
             const customColumnDef = customMetricBehaviorDefs[metricKey];
             return {
               key: makeCanonicalSortKey(COLUMN_TYPES.METRICS, metricKey),
-              title: createHighlightedNode(customColumnDef?.displayName ?? metricKey, filter),
+              title: createHighlightedNode(customColumnDef?.displayName ?? metricKey, filter, matchKey),
             };
           }),
         });
@@ -243,7 +285,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
           title: `Parameters (${filteredParams.length}${paramKeysTruncated ? '+' : ''})`,
           children: filteredParams.map((paramKey) => ({
             key: makeCanonicalSortKey(COLUMN_TYPES.PARAMS, paramKey),
-            title: createHighlightedNode(paramKey, filter),
+            title: createHighlightedNode(paramKey, filter, matchKey),
           })),
         });
       }
@@ -262,6 +304,7 @@ export const ExperimentViewRunsColumnSelector = React.memo(
     }, [
       attributeColumnNames,
       filter,
+      matchKey,
       tagsKeyList,
       matchingMetricKeys,
       matchingParamKeys,
@@ -319,13 +362,13 @@ export const ExperimentViewRunsColumnSelector = React.memo(
           const columnType = extractCanonicalSortKey(key.toString(), GROUP_KEY);
           const canonicalKeysForGroup = canonicalKeyNames[columnType];
           if (canonicalKeysForGroup) {
-            toggleGroup(checked, findMatching(canonicalKeysForGroup, filter));
+            toggleGroup(checked, findMatching(canonicalKeysForGroup, matchKey));
           }
         } else {
           toggleSingleKey(key.toString(), checked);
         }
       },
-      [canonicalKeyNames, toggleGroup, toggleSingleKey, filter],
+      [canonicalKeyNames, toggleGroup, toggleSingleKey, matchKey],
     );
 
     // This callback moves focus to tree element if down arrow has been pressed
@@ -351,18 +394,53 @@ export const ExperimentViewRunsColumnSelector = React.memo(
         }}
       >
         <div css={(theme) => ({ padding: theme.spacing.md })}>
-          <Input
-            componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunscolumnselector.tsx_300"
-            value={filter}
-            prefix={<SearchIcon />}
-            placeholder="Search columns"
-            allowClear
-            ref={searchInputRef}
-            onChange={(e) => {
-              setFilter(e.target.value);
-            }}
-            onKeyDown={searchInputKeyDown}
-          />
+          <div css={{ display: 'flex', gap: theme.spacing.sm }}>
+            <Input
+              componentId="codegen_mlflow_app_src_experiment-tracking_components_experiment-page_components_runs_experimentviewrunscolumnselector.tsx_300"
+              value={filter}
+              prefix={<SearchIcon />}
+              placeholder="Search columns"
+              allowClear
+              ref={searchInputRef}
+              onChange={(e) => {
+                setFilter(e.target.value);
+              }}
+              onKeyDown={searchInputKeyDown}
+            />
+            <Tooltip
+              componentId="mlflow.experiment_page.runs_table.column_selector.regex_toggle.tooltip"
+              content={formatMessage({
+                defaultMessage: 'Use regular expression',
+                description:
+                  'Tooltip of the toggle button next to the search box of the experiment runs table column selector, which switches the search to regular expressions',
+              })}
+            >
+              <ToggleButton
+                componentId="mlflow.experiment_page.runs_table.column_selector.regex_toggle"
+                data-testid="column-selector-regex-toggle"
+                aria-label={formatMessage({
+                  defaultMessage: 'Use regular expression',
+                  description:
+                    'Accessible label of the toggle button next to the search box of the experiment runs table column selector, which switches the search to regular expressions',
+                })}
+                pressed={useRegex}
+                onPressedChange={setUseRegex}
+              >
+                .*
+              </ToggleButton>
+            </Tooltip>
+          </div>
+          {!validKeyMatcher && (
+            <div
+              data-testid="column-selector-invalid-regex-hint"
+              css={{ paddingTop: theme.spacing.xs, color: theme.colors.textValidationDanger }}
+            >
+              <FormattedMessage
+                defaultMessage="Invalid regular expression"
+                description="Hint below the search box of the experiment runs table column selector, displayed while the typed regular expression is invalid"
+              />
+            </div>
+          )}
         </div>
         <div
           ref={scrollableContainerRef}

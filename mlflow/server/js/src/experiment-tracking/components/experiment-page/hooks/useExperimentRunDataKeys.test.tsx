@@ -81,6 +81,31 @@ describe('useExperimentRunDataKeys', () => {
     expect(MlflowService.getExperimentRunDataKeys).not.toHaveBeenCalled();
   });
 
+  describe('regular expression search', () => {
+    it('sends the regular expression flag with the search', async () => {
+      const { result } = renderHook(
+        () => useExperimentRunDataKeys({ experimentIds: ['1'], search: 'AP_50$', searchIsRegex: true }),
+        { wrapper },
+      );
+
+      await waitFor(() => expect(result.current.metricKeys).toEqual(['m1', 'm2']));
+      expect(MlflowService.getExperimentRunDataKeys).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'AP_50$', search_is_regex: true }),
+      );
+    });
+
+    it.each([
+      ['the search is empty', { search: '', searchIsRegex: true }],
+      ['the flag is not set', { search: 'loss' }],
+    ])('does not send the flag when %s', async (_, props) => {
+      const { result } = renderHook(() => useExperimentRunDataKeys({ experimentIds: ['1'], ...props }), { wrapper });
+
+      await waitFor(() => expect(result.current.metricKeys).toEqual(['m1', 'm2']));
+      const params = jest.mocked(MlflowService.getExperimentRunDataKeys).mock.calls[0][0];
+      expect(params.search_is_regex).toBeUndefined();
+    });
+  });
+
   it('reports an error when the keys cannot be looked up', async () => {
     jest.spyOn(MlflowService, 'getExperimentRunDataKeys').mockRejectedValue(new Error('not supported'));
 
