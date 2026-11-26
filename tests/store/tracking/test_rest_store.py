@@ -640,6 +640,30 @@ def test_get_run_data_keys():
         )
 
 
+def test_get_run_data_keys_search_is_regex():
+    creds = MlflowHostCreds("https://hello")
+    store = RestStore(lambda: creds)
+
+    with mock_http_request() as mock_http:
+        mock_http.return_value.text = json.dumps({"metric_keys": ["m1"]})
+        keys = store.get_run_data_keys(["0"], search="^m[0-9]$", search_is_regex=True)
+
+        expected_message = GetExperimentRunDataKeys(
+            experiment_ids=["0"],
+            run_view_type=ViewType.to_proto(ViewType.ACTIVE_ONLY),
+            search="^m[0-9]$",
+            search_is_regex=True,
+        )
+        _verify_requests(
+            mock_http,
+            creds,
+            "experiments/get-run-data-keys",
+            "POST",
+            message_to_json(expected_message),
+        )
+        assert keys == RunDataKeys(metric_keys=["m1"])
+
+
 def test_search_runs_data_projection():
     creds = MlflowHostCreds("https://hello")
     store = RestStore(lambda: creds)

@@ -859,7 +859,11 @@ def test_get_experiment_run_data_keys(mock_get_request_message, mock_tracking_st
     response = _get_experiment_run_data_keys()
 
     mock_tracking_store.get_run_data_keys.assert_called_once_with(
-        experiment_ids=["0", "1"], run_view_type=ViewType.ALL, search=None, max_results=1000
+        experiment_ids=["0", "1"],
+        run_view_type=ViewType.ALL,
+        search=None,
+        max_results=1000,
+        search_is_regex=False,
     )
     assert json.loads(response.get_data()) == {
         "metric_keys": ["m1", "m2"],
@@ -920,6 +924,60 @@ def test_get_experiment_run_data_keys_search_and_max_results(
         "metric_keys_truncated": True,
         "param_keys_truncated": False,
     }
+
+
+def test_get_experiment_run_data_keys_search_is_regex(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], search="^loss.*(acc|f1)$", search_is_regex=True
+    )
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys(metric_keys=["loss_acc"])
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 200
+    mock_tracking_store.get_run_data_keys.assert_called_once_with(
+        experiment_ids=["0"],
+        run_view_type=ViewType.ACTIVE_ONLY,
+        search="^loss.*(acc|f1)$",
+        max_results=1000,
+        search_is_regex=True,
+    )
+    assert json.loads(response.get_data())["metric_keys"] == ["loss_acc"]
+
+
+@pytest.mark.parametrize("search", ["(", "[a-"])
+def test_get_experiment_run_data_keys_validates_regex(
+    mock_get_request_message, mock_tracking_store, search
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], search=search, search_is_regex=True
+    )
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 400
+    body = json.loads(response.get_data())
+    assert body["error_code"] == "INVALID_PARAMETER_VALUE"
+    assert "Invalid regular expression" in body["message"]
+    mock_tracking_store.get_run_data_keys.assert_not_called()
+
+
+def test_get_experiment_run_data_keys_does_not_validate_plain_search_as_regex(
+    mock_get_request_message, mock_tracking_store
+):
+    mock_get_request_message.return_value = GetExperimentRunDataKeys(
+        experiment_ids=["0"], search="("
+    )
+    mock_tracking_store.get_run_data_keys.return_value = RunDataKeys()
+
+    response = _get_experiment_run_data_keys()
+
+    assert response.status_code == 200
+    kwargs = mock_tracking_store.get_run_data_keys.call_args.kwargs
+    assert kwargs["search"] == "("
+    assert kwargs["search_is_regex"] is False
 
 
 @pytest.mark.parametrize("max_results", [0, -1, 10001])

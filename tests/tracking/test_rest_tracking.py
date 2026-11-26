@@ -3237,6 +3237,31 @@ def test_get_experiment_run_data_keys_rest(mlflow_client):
     assert (metric_keys, param_keys) == (["m1", "m2"], ["p1", "p2"])
 
 
+def test_get_experiment_run_data_keys_rest_regex_search(mlflow_client):
+    experiment_id, _ = _create_run_with_data_for_projection(mlflow_client)
+    url = f"{mlflow_client.tracking_uri}/api/3.0/mlflow/experiments/get-run-data-keys"
+
+    def _post(**body):
+        return requests.post(url, json={"experiment_ids": [experiment_id], **body})
+
+    # With the flag, the search is a case-insensitive regular expression
+    response = _post(search="^M[0-9]$|^P2", search_is_regex=True)
+    assert response.status_code == 200
+    assert response.json()["metric_keys"] == ["m1", "m2"]
+    assert response.json()["param_keys"] == ["p2"]
+
+    # Without the flag, the same text is a literal substring and matches nothing
+    response = _post(search="^m1$")
+    assert response.status_code == 200
+    assert "metric_keys" not in response.json()
+
+    # An invalid regular expression is rejected
+    response = _post(search="[a-", search_is_regex=True)
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "INVALID_PARAMETER_VALUE"
+    assert "Invalid regular expression" in response.json()["message"]
+
+
 def test_get_experiment_run_data_keys_rest_requires_experiment_ids(mlflow_client):
     url = f"{mlflow_client.tracking_uri}/api/3.0/mlflow/experiments/get-run-data-keys"
 

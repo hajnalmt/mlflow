@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -35,16 +36,20 @@ class RunDataKeys:
         param_keys: Iterable[str],
         search: str | None = None,
         max_results: int | None = None,
+        search_is_regex: bool = False,
     ) -> RunDataKeys:
         """
         Builds the keys from complete collections of metric and param keys, applying the same
-        ``search`` (case-insensitive substring match) and ``max_results`` semantics as the
-        tracking store queries.
+        ``search`` (case-insensitive substring or, with ``search_is_regex``, regular expression
+        match) and ``max_results`` semantics as the tracking store queries.
         """
+        pattern = re.compile(search, re.IGNORECASE) if search and search_is_regex else None
 
         def _select(keys):
             keys = sorted(set(keys))
-            if search:
+            if pattern:
+                keys = [k for k in keys if pattern.search(k)]
+            elif search:
                 keys = [k for k in keys if search.lower() in k.lower()]
             truncated = max_results is not None and len(keys) > max_results
             return (keys[:max_results] if truncated else keys), truncated
