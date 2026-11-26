@@ -1850,6 +1850,56 @@ def test_get_run_data_keys_search_treats_wildcards_literally(
     assert store.get_run_data_keys([exp], search=search).metric_keys == expected
 
 
+@pytest.mark.parametrize(
+    ("search", "expected_metrics", "expected_params"),
+    [
+        # Case-insensitive, matched anywhere in the key unless anchored
+        ("LOSS_WEIGHT", (), ("Loss_weight",)),
+        ("ds0[0-2]/", tuple(f"eval/ds{i:02d}/loss" for i in range(3)), ()),
+        ("^loss", (), ("Loss_weight",)),
+        ("train/acc|^param_4$", ("train/accuracy",), ("param_4",)),
+        ("no-such-key", (), ()),
+    ],
+)
+def test_get_run_data_keys_search_regex(
+    store: SqlAlchemyStore, search, expected_metrics, expected_params
+):
+    exp = _create_experiments(store, "test_get_run_data_keys_search_regex")
+    _log_many_keys(store, exp)
+
+    keys = store.get_run_data_keys([exp], search=search, search_is_regex=True)
+
+    assert keys.metric_keys == expected_metrics
+    assert keys.param_keys == expected_params
+    assert not keys.metric_keys_truncated
+    assert not keys.param_keys_truncated
+
+
+@pytest.mark.parametrize(
+    ("search_is_regex", "expected"),
+    [
+        # As a substring "a.c" only matches a literal ".", as a regex "." matches any character
+        (False, ("a.c",)),
+        (True, ("a.c", "aXc", "abc")),
+    ],
+)
+def test_get_run_data_keys_search_regex_is_not_literal(
+    store: SqlAlchemyStore, search_is_regex, expected
+):
+    exp = _create_experiments(store, "test_get_run_data_keys_search_regex_not_literal")
+    run_id = _run_factory(store, _get_run_configs(exp)).info.run_id
+    store.log_batch(
+        run_id,
+        metrics=[Metric(key, 1.0, 1, 0) for key in ("a.c", "abc", "aXc", "ac")],
+        params=[],
+        tags=[],
+    )
+
+    keys = store.get_run_data_keys([exp], search="a.c", search_is_regex=search_is_regex)
+
+    assert keys.metric_keys == expected
+
+
 def test_get_run_data_keys_max_results_truncates_per_type(store: SqlAlchemyStore):
     exp = _create_experiments(store, "test_get_run_data_keys_max_results")
     _log_many_keys(store, exp)

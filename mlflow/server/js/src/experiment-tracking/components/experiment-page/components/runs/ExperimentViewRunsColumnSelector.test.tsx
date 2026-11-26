@@ -167,6 +167,70 @@ describe('ExperimentViewRunsColumnSelector', () => {
     });
   });
 
+  describe('regular expression search', () => {
+    const openPanel = async () => {
+      await userEvent.click(screen.getByTestId('column-selection-dropdown'));
+      return screen.findByTestId('column-selector-tree');
+    };
+
+    const typeRegexSearch = async (text: string) => {
+      await userEvent.click(screen.getByTestId('column-selector-regex-toggle'));
+      await userEvent.type(screen.getByPlaceholderText('Search columns'), text);
+    };
+
+    it('filters the keys case-insensitively and sends the flag to the server', async () => {
+      getRunDataKeysSpy.mockResolvedValue({
+        metric_keys: ['eval/a/AP_50', 'eval/a/AP_50_95', 'train/loss'],
+        param_keys: ['alpha_50'],
+      });
+      renderComponent();
+      const tree = await openPanel();
+      await waitFor(() => expect(tree.textContent).toContain('train/loss'));
+
+      await typeRegexSearch('ap_50$');
+
+      await waitFor(() => expect(tree.textContent).not.toContain('train/loss'));
+      expect(tree.textContent).toContain('eval/a/AP_50');
+      expect(tree.textContent).not.toContain('AP_50_95');
+      expect(tree.textContent).not.toContain('alpha_50');
+      await waitFor(() =>
+        expect(getRunDataKeysSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ search: 'ap_50$', search_is_regex: true }),
+        ),
+      );
+    });
+
+    it('highlights the matched part of the keys', async () => {
+      getRunDataKeysSpy.mockResolvedValue({ metric_keys: ['eval/a/AP_50'] });
+      renderComponent();
+      const tree = await openPanel();
+      await waitFor(() => expect(tree.textContent).toContain('eval/a/AP_50'));
+
+      await typeRegexSearch('a/ap_\\d+');
+
+      await waitFor(() => expect(tree.textContent).not.toContain('accuracy'));
+      const highlighted = Array.from(tree.querySelectorAll('strong')).map((element) => element.textContent);
+      expect(highlighted).toEqual(['a/AP_50']);
+    });
+
+    it('shows a hint, lists no keys and does not query the server while the expression is invalid', async () => {
+      renderComponent();
+      const tree = await openPanel();
+      await waitFor(() => expect(getRunDataKeysSpy).toHaveBeenCalled());
+      getRunDataKeysSpy.mockClear();
+
+      await typeRegexSearch('(');
+
+      expect(await screen.findByTestId('column-selector-invalid-regex-hint')).toHaveTextContent(
+        'Invalid regular expression',
+      );
+      await waitFor(() => expect(tree.textContent).not.toContain('accuracy'));
+      // Wait longer than the debounce of the search text
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(getRunDataKeysSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('keys that are logged on the runs but not loaded', () => {
     it('lists the metrics and params that the server found next to the ones of the loaded runs', async () => {
       getRunDataKeysSpy.mockResolvedValue({ metric_keys: ['eval/f1', 'loss'], param_keys: ['gamma'] });

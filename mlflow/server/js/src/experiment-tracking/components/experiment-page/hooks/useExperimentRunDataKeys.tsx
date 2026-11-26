@@ -20,6 +20,7 @@ const EMPTY_KEYS: string[] = [];
  *
  * @param experimentIds IDs of the experiments to look up the keys for
  * @param search only keys containing this text (case-insensitive) are returned, the typed text is debounced
+ * @param searchIsRegex treat `search` as a regular expression (case-insensitive, matching anywhere in the key)
  * @param runViewType whether to look at active or deleted runs
  * @param maxResults maximum number of metric keys and of param keys to return, each
  * @param enabled set to `false` to skip looking up the keys, e.g. while the keys are not displayed
@@ -27,26 +28,39 @@ const EMPTY_KEYS: string[] = [];
 export const useExperimentRunDataKeys = ({
   experimentIds,
   search,
+  searchIsRegex = false,
   runViewType = ViewType.ACTIVE_ONLY,
   maxResults = RUN_DATA_KEYS_MAX_RESULTS,
   enabled = true,
 }: {
   experimentIds: string[];
   search: string;
+  searchIsRegex?: boolean;
   runViewType?: string;
   maxResults?: number;
   enabled?: boolean;
 }) => {
   const [debouncedSearch] = useDebounce(search.trim(), SEARCH_DEBOUNCE_MS);
+  // An empty search lists all keys, whether it's a regular expression or not
+  const debouncedSearchIsRegex = searchIsRegex && Boolean(debouncedSearch);
 
   const { data, isLoading, isFetching, isError } = useQuery({
-    queryKey: ['experimentRunDataKeys', experimentIds, runViewType, debouncedSearch, maxResults],
+    queryKey: [
+      'experimentRunDataKeys',
+      experimentIds,
+      runViewType,
+      debouncedSearch,
+      debouncedSearchIsRegex,
+      maxResults,
+    ],
     queryFn: () =>
       MlflowService.getExperimentRunDataKeys({
         experiment_ids: experimentIds,
         run_view_type: runViewType,
         search: debouncedSearch || undefined,
         max_results: maxResults,
+        // Only sent when set, so plain searches keep working with servers that don't know the field
+        search_is_regex: debouncedSearchIsRegex || undefined,
       }),
     enabled: enabled && experimentIds.length > 0,
     // The keys change slowly and are cheap to look up again when needed

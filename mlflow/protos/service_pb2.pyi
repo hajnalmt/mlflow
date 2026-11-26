@@ -1386,7 +1386,7 @@ class SearchDatasets(_message.Message):
     def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class GetExperimentRunDataKeys(_message.Message):
-    __slots__ = ("experiment_ids", "run_view_type", "search", "max_results")
+    __slots__ = ("experiment_ids", "run_view_type", "search", "max_results", "search_is_regex")
     class Response(_message.Message):
         __slots__ = ("metric_keys", "param_keys", "metric_keys_truncated", "param_keys_truncated")
         METRIC_KEYS_FIELD_NUMBER: _ClassVar[int]
@@ -1402,11 +1402,13 @@ class GetExperimentRunDataKeys(_message.Message):
     RUN_VIEW_TYPE_FIELD_NUMBER: _ClassVar[int]
     SEARCH_FIELD_NUMBER: _ClassVar[int]
     MAX_RESULTS_FIELD_NUMBER: _ClassVar[int]
+    SEARCH_IS_REGEX_FIELD_NUMBER: _ClassVar[int]
     experiment_ids: _containers.RepeatedScalarFieldContainer[str]
     run_view_type: ViewType
     search: str
     max_results: int
-    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ..., search: _Optional[str] = ..., max_results: _Optional[int] = ...) -> None: ...
+    search_is_regex: bool
+    def __init__(self, experiment_ids: _Optional[_Iterable[str]] = ..., run_view_type: _Optional[_Union[ViewType, str]] = ..., search: _Optional[str] = ..., max_results: _Optional[int] = ..., search_is_regex: bool = ...) -> None: ...
 
 class CreateLoggedModel(_message.Message):
     __slots__ = ("experiment_id", "name", "model_type", "source_run_id", "params", "tags")

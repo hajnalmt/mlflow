@@ -2459,11 +2459,22 @@ def get_experiment_run_data_keys_impl(request_message):
             error_code=INVALID_PARAMETER_VALUE,
         )
 
+    search = request_message.search or None
+    if search and request_message.search_is_regex:
+        try:
+            re.compile(search)
+        except re.error as e:
+            raise MlflowException(
+                message=f"Invalid regular expression in request parameter search: {e}",
+                error_code=INVALID_PARAMETER_VALUE,
+            )
+
     run_data_keys = _get_tracking_store().get_run_data_keys(
         experiment_ids=experiment_ids,
         run_view_type=run_view_type,
-        search=request_message.search or None,
+        search=search,
         max_results=max_results,
+        search_is_regex=request_message.search_is_regex,
     )
     response_message = GetExperimentRunDataKeys.Response()
     response_message.MergeFrom(run_data_keys.to_proto())

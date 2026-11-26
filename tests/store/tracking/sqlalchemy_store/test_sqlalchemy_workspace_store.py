@@ -276,6 +276,27 @@ def test_get_run_data_keys_is_workspace_scoped(workspace_tracking_store):
         assert keys.metric_keys == ("b_loss",)
 
 
+def test_get_run_data_keys_regex_search_is_workspace_scoped(workspace_tracking_store):
+    exp_a_id, run_a = _create_run(workspace_tracking_store, "team-a", "keys-regex-a", "run-a")
+    exp_b_id, run_b = _create_run(workspace_tracking_store, "team-b", "keys-regex-b", "run-b")
+    _log_run_data(workspace_tracking_store, "team-a", run_a.info.run_id, "a")
+    _log_run_data(workspace_tracking_store, "team-b", run_b.info.run_id, "b")
+
+    with WorkspaceContext("team-b"):
+        # The regex only looks at the keys of the active workspace
+        keys = workspace_tracking_store.get_run_data_keys(
+            [exp_a_id, exp_b_id], search="^a_", search_is_regex=True
+        )
+        assert keys.metric_keys == ()
+        assert keys.param_keys == ()
+
+        keys = workspace_tracking_store.get_run_data_keys(
+            [exp_a_id, exp_b_id], search="^(A|B)_LOSS$|SEED", search_is_regex=True
+        )
+        assert keys.metric_keys == ("b_loss",)
+        assert keys.param_keys == ("shared_seed",)
+
+
 def test_get_run_data_keys_truncation_is_workspace_scoped(workspace_tracking_store):
     exp_a_id, run_a = _create_run(workspace_tracking_store, "team-a", "keys-trunc-a", "run-a")
     exp_b_id, run_b = _create_run(workspace_tracking_store, "team-b", "keys-trunc-b", "run-b")

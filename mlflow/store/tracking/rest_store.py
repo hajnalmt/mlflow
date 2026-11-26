@@ -1409,6 +1409,7 @@ class RestStore(
         run_view_type: ViewType = ViewType.ACTIVE_ONLY,
         search: str | None = None,
         max_results: int | None = None,
+        search_is_regex: bool = False,
     ) -> RunDataKeys:
         req_body = message_to_json(
             GetExperimentRunDataKeys(
@@ -1416,6 +1417,8 @@ class RestStore(
                 run_view_type=ViewType.to_proto(run_view_type),
                 search=search,
                 max_results=max_results,
+                # Only sent when set, so plain searches keep working with older servers
+                search_is_regex=search_is_regex or None,
             )
         )
         response_proto = self._call_endpoint(GetExperimentRunDataKeys, req_body)

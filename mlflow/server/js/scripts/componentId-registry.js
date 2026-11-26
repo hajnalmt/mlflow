@@ -1108,6 +1108,8 @@ module.exports = {
   "mlflow.experiment_page.runs.add_new_tag": "",
   "mlflow.experiment_page.runs.add_tags": "",
   "mlflow.experiment_page.runs_table.column_selector": "",
+  "mlflow.experiment_page.runs_table.column_selector.regex_toggle": "",
+  "mlflow.experiment_page.runs_table.column_selector.regex_toggle.tooltip": "",
   "mlflow.experiment_page.runs_table.column_selector.reset_to_defaults": "",
   "mlflow.experiment_page.runs_table.load_full_data": "",
   "mlflow.experiment_page.runs_table.load_full_data.tooltip": "",

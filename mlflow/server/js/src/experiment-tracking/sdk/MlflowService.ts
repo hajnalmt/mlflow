@@ -175,6 +175,7 @@ export class MlflowService {
     run_view_type?: string;
     search?: string;
     max_results?: number;
+    search_is_regex?: boolean;
   }): Promise<GetExperimentRunDataKeysResponse> =>
     postJson({
       relativeUrl: 'ajax-api/3.0/mlflow/experiments/get-run-data-keys',

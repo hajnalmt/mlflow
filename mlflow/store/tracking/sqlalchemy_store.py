@@ -2321,8 +2321,12 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
         run_view_type: ViewType = ViewType.ACTIVE_ONLY,
         search: str | None = None,
         max_results: int | None = None,
+        search_is_regex: bool = False,
     ) -> RunDataKeys:
         stages = set(LifecycleStage.view_type_to_stages(run_view_type))
+        # The RLIKE comparison of search_runs, made case-insensitive by the leading inline flag
+        # like the substring search (supported by Python's re for SQLite and by PostgreSQL)
+        regex_match = SearchUtils.get_sql_comparison_func("RLIKE", self._get_dialect())
 
         with self.ManagedSessionMaker() as session:
             experiment_ids = self._filter_experiment_ids(session, [int(e) for e in experiment_ids])
@@ -2338,7 +2342,9 @@ class SqlAlchemyStore(SqlAlchemyMCPServerRegistryMixin, SqlAlchemyGatewayStoreMi
                     .distinct()
                     .order_by(model.key)
                 )
-                if search:
+                if search and search_is_regex:
+                    stmt = stmt.where(regex_match(model.key, f"(?i){search}"))
+                elif search:
                     stmt = stmt.where(
                         sqlalchemy.func.lower(model.key).contains(search.lower(), autoescape=True)
                     )

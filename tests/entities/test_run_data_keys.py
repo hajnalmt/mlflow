@@ -1,3 +1,5 @@
+import pytest
+
 from mlflow.entities.run_data_keys import RunDataKeys
 from mlflow.protos.service_pb2 import GetExperimentRunDataKeys
 
@@ -39,6 +41,34 @@ def test_from_keys_applies_search_and_limit():
     assert keys.metric_keys_truncated is True
     assert keys.param_keys == ("LOSS_weight",)
     assert keys.param_keys_truncated is False
+
+
+@pytest.mark.parametrize(
+    ("search", "expected"),
+    [
+        # Case-insensitive, matched anywhere in the key unless anchored
+        ("LOSS$", ("Train/LOSS", "val/loss")),
+        ("^val/", ("val/acc", "val/loss")),
+        ("^train|acc", ("Train/LOSS", "val/acc")),
+        ("no-match", ()),
+    ],
+)
+def test_from_keys_search_is_regex(search, expected):
+    keys = RunDataKeys.from_keys(
+        ["val/loss", "Train/LOSS", "val/acc"], [], search=search, search_is_regex=True
+    )
+
+    assert keys.metric_keys == expected
+
+
+def test_from_keys_regex_special_characters_are_not_literal():
+    metric_keys = ["a.c", "abc", "a_b"]
+
+    literal = RunDataKeys.from_keys(metric_keys, [], search="a.c")
+    regex = RunDataKeys.from_keys(metric_keys, [], search="a.c", search_is_regex=True)
+
+    assert literal.metric_keys == ("a.c",)
+    assert regex.metric_keys == ("a.c", "abc")
 
 
 def test_from_keys_without_limit_is_never_truncated():

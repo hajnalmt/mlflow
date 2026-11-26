@@ -1120,6 +1120,7 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
         run_view_type: ViewType = ViewType.ACTIVE_ONLY,
         search: str | None = None,
         max_results: int | None = None,
+        search_is_regex: bool = False,
     ) -> RunDataKeys:
         """
         Return the distinct metric and param keys that are logged on the runs of the given
@@ -1132,6 +1133,8 @@ class AbstractStore(MCPServerRegistryMixin, GatewayStoreMixin):
             search: If set, only keys that contain this text (case-insensitive) are returned.
             max_results: Maximum number of metric keys and of param keys to return, each. If
                 ``None``, all matching keys are returned.
+            search_is_regex: If ``True``, ``search`` is a regular expression, and only keys
+                that it matches anywhere (case-insensitive) are returned.
 
         Returns:
             A :py:class:`mlflow.entities.run_data_keys.RunDataKeys` holding the sorted, distinct

@@ -563,6 +563,10 @@
     "defaultMessage": "State",
     "description": "Gateway endpoint usage > metrics filter > state column option label"
   },
+  "0DiOdx": {
+    "defaultMessage": "Use regular expression",
+    "description": "Tooltip of the toggle button next to the search box of the experiment runs table column selector, which switches the search to regular expressions"
+  },
   "0ElvS9": {
     "defaultMessage": "Y-axis:",
     "description": "Label text for y-axis in contour plot comparison in MLflow"
@@ -3166,6 +3170,10 @@
   "Aj5dMu": {
     "defaultMessage": "Icons",
     "description": "Label for icons field in create MCP server modal"
+  },
+  "AjABqV": {
+    "defaultMessage": "Invalid regular expression",
+    "description": "Hint below the search box of the experiment runs table column selector, displayed while the typed regular expression is invalid"
   },
   "AmLGSf": {
     "defaultMessage": "Apply filters",
@@ -8426,6 +8434,10 @@
   "WCG4Z9": {
     "defaultMessage": "Inputs",
     "description": "Column selector label for the inputs column"
+  },
+  "WCyL79": {
+    "defaultMessage": "Use regular expression",
+    "description": "Accessible label of the toggle button next to the search box of the experiment runs table column selector, which switches the search to regular expressions"
   },
   "WDmiPW": {
     "defaultMessage": "You need another endpoint to use guardrails.",
